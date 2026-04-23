@@ -1831,7 +1831,7 @@ pub fn pvoc_stretch(samples: &[f32], fft_size: usize, hop_in: usize, stretch: f3
     if n == 0 || fft_size < 4 { return vec![]; }
     let fft_n = fft_size.next_power_of_two();
     let hop_out = ((hop_in as f32 * stretch).round() as usize).max(1);
-    let n_frames = (n + hop_in - 1) / hop_in;
+    let n_frames = n.div_ceil(hop_in);
     let out_len = n_frames * hop_out + fft_n;
 
     let mut planner = RealFftPlanner::<f32>::new();
@@ -2066,6 +2066,7 @@ pub struct ThiranAllpass { pub input: Arc<dyn Signal>, pub delay_samples: f64, p
 fn thiran_coeffs(d: f64, order: usize) -> Vec<f64> {
     let mut a = vec![0.0f64; order + 1];
     a[0] = 1.0;
+    #[allow(clippy::needless_range_loop)] // k used in binomial math, not just as array index
     for k in 1..=order {
         let mut binom = 1usize;
         for j in 0..k { binom = binom * (order - j) / (j + 1); }
@@ -2149,6 +2150,7 @@ impl SignalInstance for FarrowInstance {
         self.input.fill(out);
         self.delay_mod.fill(&mut self.delay_buf[..n_out]);
         let blen = self.buffer.len();
+        #[allow(clippy::needless_range_loop)] // k indexes both out[] and delay_buf[]
         for k in 0..n_out {
             let xn = out[k];
             self.buffer[self.pos] = xn;

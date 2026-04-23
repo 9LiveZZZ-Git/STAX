@@ -795,7 +795,7 @@ pub fn automap_bin(a: Value, b: Value, f: fn(f64, f64) -> f64) -> Result<Value> 
             let ib = collect_to_vec(&b)?;
             let len = ia.len().min(ib.len());
             let mut out = Vec::with_capacity(len);
-            for (x, y) in ia.into_iter().zip(ib.into_iter()).take(len) {
+            for (x, y) in ia.into_iter().zip(ib).take(len) {
                 out.push(automap_bin(x, y, f)?);
             }
             Ok(make_list(out))
@@ -1271,7 +1271,7 @@ fn install_builtins(i: &mut Interp) {
         if all_scalar {
             i.push(make_list(inputs));
         } else {
-            let lists: Vec<Vec<Value>> = inputs.iter().map(|v| collect_to_vec(v)).collect::<Result<_>>()?;
+            let lists: Vec<Vec<Value>> = inputs.iter().map(collect_to_vec).collect::<Result<_>>()?;
             let len = lists.iter().map(|l| l.len()).min().unwrap_or(0);
             let r: Vec<Value> = (0..len).map(|k| make_list(lists.iter().map(|l| l[k].clone()).collect())).collect();
             i.push(make_list(r));
@@ -1473,7 +1473,7 @@ fn install_builtins(i: &mut Interp) {
             i.push(make_list(result));
         } else {
             let n_raw = real_val(&n_val)?;
-            if n_raw < 0.0 || n_raw > 1_000_000.0 {
+            if !(0.0..=1_000_000.0).contains(&n_raw) {
                 return Err(Error::Other("N: n out of range".into()));
             }
             let n = n_raw as usize;
@@ -2182,7 +2182,7 @@ fn install_builtins(i: &mut Interp) {
         let start = real_val(&i.pop()?)?;
         let counts_val = i.pop()?;
         let steps: Vec<f64> = if matches!(&steps_val, Value::Stream(_)) {
-            collect_to_vec(&steps_val)?.iter().map(|v| real_val(v)).collect::<Result<_>>()?
+            collect_to_vec(&steps_val)?.iter().map(real_val).collect::<Result<_>>()?
         } else {
             vec![real_val(&steps_val)?]
         };
@@ -3237,7 +3237,7 @@ fn install_builtins(i: &mut Interp) {
                     candidate += 1;
                     for &p in &found {
                         if p * p > n { break; }
-                        if n % p == 0 { continue 'outer; }
+                        if n.is_multiple_of(p) { continue 'outer; }
                     }
                     found.push(n);
                     return Some(Value::Real(n as f64));

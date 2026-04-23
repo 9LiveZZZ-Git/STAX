@@ -20,11 +20,13 @@ pub struct Function {
     pub captured: Vec<(Arc<str>, Value)>,
 }
 
+pub type NativeFnPtr = Arc<dyn Fn(&[Value]) -> crate::Result<Vec<Value>> + Send + Sync>;
+
 pub enum FunctionBody {
     /// User-written SAPF code, compiled to an Op stream.
     User(Arc<[Op]>),
     /// Rust closure. Takes named args in order, returns pushed values.
-    Native(Arc<dyn Fn(&[Value]) -> crate::Result<Vec<Value>> + Send + Sync>),
+    Native(NativeFnPtr),
 }
 
 impl Function {
