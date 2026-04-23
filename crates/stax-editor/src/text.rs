@@ -27,6 +27,46 @@ static BUILTIN_DOCS: &[(&str, &str, &str)] = &[
     ("pan2",    "sig pos → [L R]",            "Pan mono signal to stereo; pos in [-1, 1]"),
 ];
 
+// ── Did-you-mean helpers ───────────────────────────────────────────────────
+
+static KNOWN_WORDS: &[&str] = &[
+    "+", "-", "*", "/", "dup", "drop", "swap", "over",
+    "sinosc", "saw", "pulse", "wnoise", "pink", "lpf", "hpf", "svflp",
+    "play", "stop", "ar", "adsr", "verb", "pan2", "pluck",
+    "ord", "nat", "cyc", "by", "N", "to", "take", "drop",
+    "lorenz", "rossler", "goertzel", "cqt", "lpcanalz",
+    "p", "trace", "normalize",
+];
+
+fn word_similarity(a: &str, b: &str) -> usize {
+    a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
+}
+
+fn best_suggestion(unknown: &str) -> Option<&'static str> {
+    if unknown.len() < 2 { return None; }
+    let best = KNOWN_WORDS.iter()
+        .map(|&w| (w, word_similarity(unknown, w)))
+        .max_by_key(|&(_, s)| s)?;
+    if best.1 >= 2 { Some(best.0) } else { None }
+}
+
+fn extract_unknown_word(err: &str) -> Option<&str> {
+    // Look for text between single or double quotes first
+    for delim in &['\'', '"'] {
+        if let Some(start) = err.find(*delim) {
+            let rest = &err[start + 1..];
+            if let Some(end) = rest.find(*delim) {
+                let word = &rest[..end];
+                if !word.is_empty() {
+                    return Some(word);
+                }
+            }
+        }
+    }
+    // Fall back to last space-separated token
+    err.split_whitespace().last()
+}
+
 impl StaxApp {
     // ── Left panel: files + outline + diagnostics ──────────────────────────
 
@@ -82,6 +122,21 @@ impl StaxApp {
                             .monospace(),
                     );
                 });
+
+                // Did-you-mean suggestion
+                let suggestion = extract_unknown_word(&msg)
+                    .and_then(|w| best_suggestion(w));
+                if let Some(s) = suggestion {
+                    ui.horizontal(|ui| {
+                        ui.add_space(18.0);
+                        ui.label(
+                            egui::RichText::new(format!("did you mean: {s}"))
+                                .color(shell::INK_2)
+                                .size(11.0)
+                                .monospace(),
+                        );
+                    });
+                }
             } else {
                 ui.horizontal(|ui| {
                     ui.add_space(18.0);
@@ -101,6 +156,9 @@ impl StaxApp {
     // ── Centre: editable code editor with syntax highlighting ─────────────
 
     pub(crate) fn draw_text_editor(&mut self, ui: &mut egui::Ui) {
+        const GUTTER_W: f32 = 32.0;
+        const ROW_H: f32 = 18.0;
+
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, shell::PAPER);
 
@@ -138,30 +196,46 @@ impl StaxApp {
             );
         }
 
-        // ── Code area ─────────────────────────────────────────────────────
-        let code_rect = Rect::from_min_size(
+        // ── Code area (gutter + editor) ────────────────────────────────────
+        let full_code_rect = Rect::from_min_size(
             pos2(rect.min.x, rect.min.y + bc_h),
             vec2(rect.width(), rect.height() - bc_h),
         );
 
+        // Gutter rect (left 32px)
+        let gutter_rect = Rect::from_min_size(
+            full_code_rect.min,
+            vec2(GUTTER_W, full_code_rect.height()),
+        );
+        // Editor rect (remainder)
+        let editor_rect = Rect::from_min_max(
+            pos2(full_code_rect.min.x + GUTTER_W + 1.0, full_code_rect.min.y),
+            full_code_rect.max,
+        );
+
+        // Draw gutter background and right border
+        ui.painter().rect_filled(gutter_rect, 0.0, shell::PAPER_2);
+        ui.painter().line_segment(
+            [gutter_rect.right_top(), gutter_rect.right_bottom()],
+            Stroke::new(1.0, shell::RULE),
+        );
+
+        // ── Editor scroll area ─────────────────────────────────────────────
         let mut code_ui = ui.new_child(
             egui::UiBuilder::new()
-                .max_rect(code_rect)
+                .max_rect(editor_rect)
                 .layout(egui::Layout::top_down(egui::Align::LEFT)),
         );
 
-        // Build the syntax-highlighting layouter closure.
-        // egui 0.31: layouter signature is FnMut(&Ui, &str, f32) -> Arc<Galley>
         let mut layouter = |ui: &egui::Ui, s: &str, _wrap_width: f32| -> std::sync::Arc<egui::Galley> {
             let mut job = crate::syntax::layout_job(s);
-            // Never wrap — horizontal scroll instead
             job.wrap.max_width = f32::INFINITY;
             ui.fonts(|f| f.layout_job(job))
         };
 
         let te_id = Id::new("stax_text_editor");
 
-        let te_resp = egui::ScrollArea::both()
+        let scroll_out = egui::ScrollArea::both()
             .id_salt("code_scroll")
             .show(&mut code_ui, |ui| {
                 let te = egui::TextEdit::multiline(&mut self.source)
@@ -179,7 +253,6 @@ impl StaxApp {
                 // Track cursor line from cursor_range byte offset
                 if let Some(cursor_range) = out.cursor_range {
                     let byte_offset = cursor_range.primary.ccursor.index;
-                    // Count newlines before the cursor offset
                     let line = self.source[..byte_offset.min(self.source.len())]
                         .chars()
                         .filter(|&c| c == '\n')
@@ -198,11 +271,48 @@ impl StaxApp {
                 }
 
                 out.response
-            })
-            .inner;
+            });
+
+        let scroll_y = scroll_out.state.offset.y;
+        let te_resp = scroll_out.inner;
+
+        // ── Gutter line numbers ────────────────────────────────────────────
+        let total_lines = self.source.lines().count().max(1);
+        let visible_start = (scroll_y / ROW_H) as usize;
+        let visible_end = visible_start + (gutter_rect.height() / ROW_H) as usize + 2;
+        let visible_end = visible_end.min(total_lines);
+
+        let gutter_y = gutter_rect.min.y;
+        let scroll_frac = scroll_y.rem_euclid(ROW_H);
+
+        for line in (visible_start + 1)..=(visible_end + 1) {
+            if line > total_lines { break; }
+            let row_top = gutter_y + (line - 1 - visible_start) as f32 * ROW_H - scroll_frac;
+            let row_rect = Rect::from_min_size(
+                pos2(gutter_rect.min.x, row_top),
+                vec2(GUTTER_W, ROW_H),
+            );
+
+            // Active line highlight
+            if line == self.cursor_line {
+                ui.painter().rect_filled(row_rect, 0.0, shell::PAPER);
+                ui.painter().line_segment(
+                    [row_rect.left_top(), row_rect.left_bottom()],
+                    Stroke::new(2.0, shell::WARM),
+                );
+            }
+
+            // Line number text
+            ui.painter().text(
+                pos2(gutter_rect.max.x - 6.0, row_top + ROW_H * 0.5),
+                egui::Align2::RIGHT_CENTER,
+                line.to_string(),
+                egui::FontId::new(10.0, egui::FontFamily::Monospace),
+                shell::INK_3,
+            );
+        }
 
         // ── Error underline ────────────────────────────────────────────────
-        // Draw a 1px WARM underline at the bottom of the TextEdit widget rect.
         if self.parse_error.is_some() {
             let r = te_resp.rect;
             ui.painter().line_segment(
@@ -212,17 +322,14 @@ impl StaxApp {
         }
 
         // ── Hover-doc tooltip ──────────────────────────────────────────────
-        // Check whether the pointer is over the code area and try to identify
-        // the word under the cursor to show a builtin doc tooltip.
         let ctx = ui.ctx().clone();
         if let Some(hover_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-            if code_rect.contains(hover_pos) {
-                if let Some(word) = word_at_screen_pos(&self.source, hover_pos, code_rect) {
+            if full_code_rect.contains(hover_pos) {
+                if let Some(word) = word_at_screen_pos(&self.source, hover_pos, editor_rect) {
                     if let Some(doc) = lookup_doc(&word) {
                         let tooltip_id = Id::new("stax_hover_doc");
                         let layer_id = egui::LayerId::new(egui::Order::Tooltip, tooltip_id);
                         egui::show_tooltip_at_pointer(&ctx, layer_id, tooltip_id, |ui| {
-                            // Name — INK bold 12px mono
                             ui.label(
                                 egui::RichText::new(doc.0)
                                     .color(shell::INK)
@@ -230,14 +337,12 @@ impl StaxApp {
                                     .monospace()
                                     .strong(),
                             );
-                            // Signature — PORT_FUN 11px mono
                             ui.label(
                                 egui::RichText::new(doc.1)
                                     .color(shell::PORT_FUN)
                                     .size(11.0)
                                     .monospace(),
                             );
-                            // Description — INK_2 11px mono
                             ui.label(
                                 egui::RichText::new(doc.2)
                                     .color(shell::INK_2)
@@ -264,9 +369,22 @@ impl StaxApp {
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.set_width(shell::SIDE_W);
 
-            // ── STACK ──
-            section_header(ui, "stack", None);
-            draw_stack_contents(ui, &self.interp.stack);
+            // ── STACK AT CURSOR ──
+            if self.cursor_stack.is_empty() && self.cursor_stack_line == 0 {
+                section_header(ui, "stack", None);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    ui.label(
+                        egui::RichText::new("(run REPL to see stack)")
+                            .color(shell::INK_3)
+                            .size(11.0)
+                            .monospace(),
+                    );
+                });
+            } else {
+                section_header(ui, &format!("stack at line {}", self.cursor_stack_line), None);
+                draw_stack_contents(ui, &self.cursor_stack);
+            }
 
             ui.add_space(4.0);
             ui.separator();
@@ -377,7 +495,6 @@ impl StaxApp {
         let mut out = Vec::new();
         for (line_idx, line) in self.source.lines().enumerate() {
             let trimmed = line.trim();
-            // Detect "expr = name" pattern (bind at end of line)
             if let Some(pos) = trimmed.rfind(" = ") {
                 let name = &trimmed[pos + 3..];
                 if !name.is_empty()
@@ -395,8 +512,6 @@ impl StaxApp {
 
 // ── Hover-doc helpers ──────────────────────────────────────────────────────
 
-/// Look up a word in the builtin docs table.
-/// Returns `Some((name, signature, description))` on a match.
 fn lookup_doc(word: &str) -> Option<(&'static str, &'static str, &'static str)> {
     BUILTIN_DOCS
         .iter()
@@ -404,15 +519,7 @@ fn lookup_doc(word: &str) -> Option<(&'static str, &'static str, &'static str)> 
         .map(|&(n, s, d)| (n, s, d))
 }
 
-/// Estimate the word under the pointer given a pointer position and the rect
-/// that the code area occupies.
-///
-/// Strategy: use a fixed 8px-per-char approximation (13px mono ≈ 7.8px wide)
-/// to convert the x offset within the widget into a char column, then combine
-/// with the y offset (divided by 18px row height) to find the source character,
-/// and extract the identifier / operator token that spans that position.
 fn word_at_screen_pos(source: &str, hover: egui::Pos2, code_rect: Rect) -> Option<String> {
-    // Rough metrics for 13px JetBrains Mono
     const CHAR_W: f32 = 7.8;
     const ROW_H: f32 = 18.0;
 
@@ -424,7 +531,6 @@ fn word_at_screen_pos(source: &str, hover: egui::Pos2, code_rect: Rect) -> Optio
 
     let line = source.lines().nth(row)?;
 
-    // Find the byte index at `col` (clamped)
     let mut byte_idx = 0usize;
     for (i, c) in line.char_indices() {
         if i >= col {
@@ -435,14 +541,12 @@ fn word_at_screen_pos(source: &str, hover: egui::Pos2, code_rect: Rect) -> Optio
     }
     byte_idx = byte_idx.min(line.len());
 
-    // Walk backwards to find start of current token
     let before = &line[..byte_idx];
     let token_start = before
         .rfind(|c: char| !is_word_char(c) && !is_op_char(c))
         .map(|p| p + 1)
         .unwrap_or(0);
 
-    // Walk forwards to find end of current token
     let after = &line[byte_idx..];
     let token_end_rel = after
         .find(|c: char| !is_word_char(c) && !is_op_char(c))
@@ -491,7 +595,6 @@ fn section_header(ui: &mut egui::Ui, title: &str, meta: Option<String>) {
     ui.horizontal(|ui| {
         ui.add_space(14.0);
         let lw = ui.available_width() - 14.0;
-        // Dotted underline
         let rect = ui.allocate_space(vec2(lw, 1.0)).1;
         ui.painter().line_segment(
             [rect.left_center(), rect.right_center()],

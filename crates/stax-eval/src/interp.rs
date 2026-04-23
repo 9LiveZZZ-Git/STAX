@@ -33,6 +33,8 @@ pub struct Interp {
     voices: Vec<stax_audio::Voice>,
     /// Active MIDI output connection (set via `midiConnect`).
     pub midi_out: Option<stax_io::MidiOut>,
+    /// Active MIDI input connection (set via `midiInConnect`).
+    pub midi_in: Option<stax_io::MidiIn>,
 }
 
 impl Interp {
@@ -53,6 +55,7 @@ impl Interp {
             audio_rt: None,
             voices: Vec::new(),
             midi_out: None,
+            midi_in: None,
         };
         install_builtins(&mut interp);
         interp
@@ -2425,6 +2428,49 @@ fn install_builtins(i: &mut Interp) {
         } else {
             return Err(Error::Other("midiCC: no MIDI output connected".into()));
         }
+        Ok(())
+    });
+
+    // ---- MIDI In ------------------------------------------------------------
+
+    reg(i, "midiInPorts", |i| {
+        let ports = stax_io::MidiIn::ports();
+        let vals: Vec<Value> = ports.into_iter()
+            .map(|s| Value::Str(Arc::from(s.as_str())))
+            .collect();
+        i.push(make_list(vals));
+        Ok(())
+    });
+
+    reg(i, "midiInConnect", |i| {
+        let idx = real_val(&i.pop()?)? as usize;
+        match stax_io::MidiIn::connect(idx) {
+            Ok(conn) => { i.midi_in = Some(conn); i.push(Value::Nil); }
+            Err(e) => return Err(Error::Other(format!("midiInConnect: {e}"))),
+        }
+        Ok(())
+    });
+
+    // ( -- [status data1 data2] | nil ) — drain one message from the queue
+    reg(i, "midiInRead", |i| {
+        let msg = i.midi_in.as_ref().and_then(|m| m.read());
+        match msg {
+            Some(bytes) => {
+                let vals = vec![
+                    Value::Real(bytes[0] as f64),
+                    Value::Real(bytes[1] as f64),
+                    Value::Real(bytes[2] as f64),
+                ];
+                i.push(make_list(vals));
+            }
+            None => { i.push(Value::Nil); }
+        }
+        Ok(())
+    });
+
+    reg(i, "midiInClose", |i| {
+        i.midi_in = None;
+        i.push(Value::Nil);
         Ok(())
     });
 

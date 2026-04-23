@@ -14,4 +14,4 @@ stax-eval   = { workspace = true }
 stax-parser = { workspace = true }
 stax-graph  = { workspace = true }
 egui        = "0.31"
-eframe      = { version = "0.31", features = ["default_fonts"] }
+eframe      = { version = "0.31", features = ["default_fonts", "persistence"] }

@@ -74,6 +74,61 @@ mod native {
         }
     }
 
+    // ---- MIDI In ------------------------------------------------------------
+
+    use midir::{MidiInput, MidiInputConnection};
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+
+    /// A live MIDI input connection with an internal message queue.
+    ///
+    /// Messages arrive in a background callback thread and are queued for
+    /// `read()` to drain from the interpreter thread.
+    pub struct MidiIn {
+        /// Keep the connection alive; dropped when struct is dropped.
+        _conn: MidiInputConnection<()>,
+        queue: Arc<Mutex<VecDeque<[u8; 3]>>>,
+    }
+
+    unsafe impl Send for MidiIn {}
+
+    impl MidiIn {
+        pub fn ports() -> Vec<String> {
+            MidiInput::new("stax-in")
+                .ok()
+                .map(|mi| {
+                    mi.ports()
+                        .iter()
+                        .filter_map(|p| mi.port_name(p).ok())
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+
+        pub fn connect(port_idx: usize) -> Result<Self> {
+            let mi = MidiInput::new("stax-in")?;
+            let ports = mi.ports();
+            let port = ports
+                .get(port_idx)
+                .ok_or_else(|| anyhow!("MIDI input port {port_idx} not found"))?;
+            let queue: Arc<Mutex<VecDeque<[u8; 3]>>> = Arc::new(Mutex::new(VecDeque::new()));
+            let q2 = Arc::clone(&queue);
+            let conn = mi.connect(port, "stax-in", move |_stamp, msg, _| {
+                if msg.len() >= 3 {
+                    if let Ok(mut q) = q2.lock() {
+                        q.push_back([msg[0], msg[1], msg[2]]);
+                    }
+                }
+            }, ())?;
+            Ok(Self { _conn: conn, queue })
+        }
+
+        /// Drain one MIDI message `[status, data1, data2]` from the queue, if any.
+        pub fn read(&self) -> Option<[u8; 3]> {
+            self.queue.lock().ok()?.pop_front()
+        }
+    }
+
     // ---- OSC ----------------------------------------------------------------
 
     pub use rosc::OscType;
@@ -114,6 +169,16 @@ mod stub {
         pub fn cc(&mut self, _ch: u8, _ctrl: u8, _v: u8) -> anyhow::Result<()> {
             bail!("MIDI is not available in WASM")
         }
+    }
+
+    pub struct MidiIn;
+
+    impl MidiIn {
+        pub fn ports() -> Vec<String> { vec![] }
+        pub fn connect(_port_idx: usize) -> anyhow::Result<Self> {
+            bail!("MIDI in is not available in WASM (M6)")
+        }
+        pub fn read(&self) -> Option<[u8; 3]> { None }
     }
 
     pub enum OscType { Int(i32) }

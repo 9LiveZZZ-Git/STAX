@@ -11,6 +11,22 @@ use crate::shell;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View { Graph, Text, FnPort }
 
+// ── Time-travel snapshot ───────────────────────────────────────────────────
+
+/// Stack state captured after a successful REPL execution step.
+pub struct TravelSnapshot {
+    pub stack: Vec<stax_core::Value>,
+    pub label: String,
+}
+
+// ── Reveal router ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub enum RevealTarget {
+    GraphNode(stax_graph::NodeId),
+    TextLine(usize),
+}
+
 // ── REPL line ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,9 +67,25 @@ pub struct StaxApp {
 
     // Text view state
     pub cursor_line: usize,
+    pub cursor_stack: Vec<stax_core::Value>,
+    pub cursor_stack_line: usize,
 
     // Fn-port view state
     pub fnport: FnPortState,
+
+    // Rank / adverb overrides (interactive badges in graph view)
+    pub rank_overrides: HashMap<(NodeId, u8), u8>,  // (node_id, port_idx) → rank code 0–4
+    pub adverb_overrides: HashMap<NodeId, Option<stax_core::Adverb>>,
+
+    // Time-travel
+    pub travel_snapshots: Vec<TravelSnapshot>,
+    pub travel_step: usize,
+
+    // Reveal router (queued cross-view jump, consumed on next frame)
+    pub pending_reveal: Option<RevealTarget>,
+
+    // Scope samples for sink-node waveforms (last N audio output samples)
+    pub scope_samples: Vec<f32>,
 
     // Animation
     pub anim_t: f32,
@@ -111,12 +143,54 @@ impl StaxApp {
             selected_node: None,
             dragging: None,
             cursor_line: 1,
+            cursor_stack: Vec::new(),
+            cursor_stack_line: 0,
             fnport: FnPortState::default(),
+            rank_overrides: HashMap::new(),
+            adverb_overrides: HashMap::new(),
+            travel_snapshots: Vec::new(),
+            travel_step: 0,
+            pending_reveal: None,
+            scope_samples: Vec::new(),
             anim_t: 0.0,
             source,
         };
+
+        // Load saved layout from eframe persistent storage
+        if let Some(s) = cc.storage {
+            let parse_f32 = |key: &str, default: f32| -> f32 {
+                s.get_string(key).and_then(|v| v.parse().ok()).unwrap_or(default)
+            };
+            app.canvas_pan.x = parse_f32("cpx", 0.0);
+            app.canvas_pan.y = parse_f32("cpy", 0.0);
+            app.canvas_zoom  = parse_f32("czm", 1.0).clamp(0.15, 5.0);
+            app.view = match s.get_string("view").as_deref() {
+                Some("text")   => View::Text,
+                Some("fnport") => View::FnPort,
+                _              => View::Graph,
+            };
+        }
+
         app.recompile();
         app
+    }
+
+    // ── Cursor-stack: re-eval lines 1..cursor_line ─────────────────────────
+
+    pub fn compute_cursor_stack(&mut self) {
+        if self.cursor_line == self.cursor_stack_line { return; }
+        let partial: String = self.source.lines()
+            .take(self.cursor_line)
+            .collect::<Vec<_>>()
+            .join("\n");
+        if let Ok(ops) = stax_parser::parse(&partial) {
+            let mut interp = stax_eval::Interp::new();
+            let _ = interp.exec(&ops);
+            self.cursor_stack = interp.stack;
+        } else {
+            self.cursor_stack = Vec::new();
+        }
+        self.cursor_stack_line = self.cursor_line;
     }
 
     // ── Recompile source → ops → graph → layout ────────────────────────────
@@ -189,6 +263,15 @@ impl StaxApp {
                         } else {
                             self.repl_push(ReplKind::Ok, "ok");
                         }
+                        // Record time-travel snapshot
+                        self.travel_snapshots.push(TravelSnapshot {
+                            stack: self.interp.stack.clone(),
+                            label: line.to_owned(),
+                        });
+                        if self.travel_snapshots.len() > 1000 {
+                            self.travel_snapshots.drain(0..100);
+                        }
+                        self.travel_step = self.travel_snapshots.len().saturating_sub(1);
                     }
                 }
             }
@@ -210,9 +293,40 @@ impl StaxApp {
 // ── eframe::App ────────────────────────────────────────────────────────────
 
 impl eframe::App for StaxApp {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        storage.set_string("cpx", self.canvas_pan.x.to_string());
+        storage.set_string("cpy", self.canvas_pan.y.to_string());
+        storage.set_string("czm", self.canvas_zoom.to_string());
+        let view_str = match self.view {
+            View::Graph  => "graph",
+            View::Text   => "text",
+            View::FnPort => "fnport",
+        };
+        storage.set_string("view", view_str.to_owned());
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.anim_t = ctx.input(|i| i.time as f32);
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
+
+        // ── Reveal router: consume pending cross-view jump ─────────────────
+        if let Some(target) = self.pending_reveal.take() {
+            match target {
+                RevealTarget::GraphNode(nid) => {
+                    self.view = View::Graph;
+                    self.selected_node = Some(nid);
+                    // Pan canvas so the node is visible
+                    if let Some(&pos) = self.node_positions.get(&nid) {
+                        self.canvas_pan = -vec2(pos.x - 200.0, pos.y - 200.0);
+                    }
+                }
+                RevealTarget::TextLine(line) => {
+                    self.view = View::Text;
+                    self.cursor_line = line;
+                    self.cursor_stack_line = 0; // force recompute
+                }
+            }
+        }
 
         let frame_none = egui::Frame::new()
             .fill(shell::PAPER)
@@ -557,7 +671,7 @@ impl StaxApp {
         }
     }
 
-    fn draw_timebar(&self, ui: &mut egui::Ui) {
+    fn draw_timebar(&mut self, ui: &mut egui::Ui) {
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, shell::PAPER);
         ui.painter().line_segment(
@@ -565,32 +679,84 @@ impl StaxApp {
             Stroke::new(1.0, shell::RULE),
         );
 
+        let total = self.travel_snapshots.len();
+        let step  = self.travel_step;
+
         ui.horizontal(|ui| {
             ui.set_min_height(shell::TIMEBAR_H);
             ui.add_space(14.0);
 
-            // Playback controls (visual only for M5)
-            for ctrl in ["◀◀", "◀", "❚❚", "▶", "▶▶"] {
-                ui.label(
-                    egui::RichText::new(ctrl).color(shell::INK).size(13.0).monospace(),
-                );
-                ui.add_space(4.0);
-            }
+            // ◀◀ — jump to step 0
+            let r = ui.add(egui::Label::new(
+                egui::RichText::new("◀◀").color(shell::INK).size(13.0).monospace()
+            ).sense(egui::Sense::click()));
+            if r.clicked() && total > 0 { self.travel_step = 0; }
+            ui.add_space(4.0);
 
+            // ◀ — step back
+            let r = ui.add(egui::Label::new(
+                egui::RichText::new("◀").color(shell::INK).size(13.0).monospace()
+            ).sense(egui::Sense::click()));
+            if r.clicked() && step > 0 { self.travel_step -= 1; }
+            ui.add_space(4.0);
+
+            // ❚❚ — jump to latest
+            let r = ui.add(egui::Label::new(
+                egui::RichText::new("❚❚").color(shell::INK).size(13.0).monospace()
+            ).sense(egui::Sense::click()));
+            if r.clicked() && total > 0 { self.travel_step = total.saturating_sub(1); }
+            ui.add_space(4.0);
+
+            // ▶ — step forward
+            let r = ui.add(egui::Label::new(
+                egui::RichText::new("▶").color(shell::INK).size(13.0).monospace()
+            ).sense(egui::Sense::click()));
+            if r.clicked() && step + 1 < total { self.travel_step += 1; }
+            ui.add_space(4.0);
+
+            // ▶▶ — jump to end
+            let r = ui.add(egui::Label::new(
+                egui::RichText::new("▶▶").color(shell::INK).size(13.0).monospace()
+            ).sense(egui::Sense::click()));
+            if r.clicked() && total > 0 { self.travel_step = total.saturating_sub(1); }
             ui.add_space(8.0);
+
+            let step_label = if total == 0 {
+                "step — / —".to_owned()
+            } else {
+                format!("step {} / {}", step + 1, total)
+            };
             ui.label(
-                egui::RichText::new("step — / —")
-                    .color(shell::INK_2)
-                    .size(11.0)
-                    .monospace(),
+                egui::RichText::new(step_label).color(shell::INK_2).size(11.0).monospace(),
             );
 
-            // Scrub bar
+            // Scrub bar — drag to scrub through snapshots
             ui.add_space(8.0);
-            let bar_w = ui.available_width() - 120.0;
-            let bar_rect = ui.allocate_space(vec2(bar_w, 6.0)).1;
-            ui.painter().rect_filled(bar_rect, 0.0, shell::SURFACE);
-            ui.painter().rect_stroke(bar_rect, 0.0, Stroke::new(1.0, shell::RULE_2), egui::StrokeKind::Outside);
+            let bar_w = (ui.available_width() - 14.0).max(0.0);
+            let (bar_resp, bar_painter) = ui.allocate_painter(vec2(bar_w, shell::TIMEBAR_H - 8.0), egui::Sense::drag());
+            let br = bar_resp.rect;
+            let track = Rect::from_center_size(br.center(), vec2(br.width(), 6.0));
+            bar_painter.rect_filled(track, 0.0, shell::SURFACE);
+            bar_painter.rect_stroke(track, 0.0, Stroke::new(1.0, shell::RULE_2), egui::StrokeKind::Outside);
+
+            if total > 1 {
+                // Fill up to current step
+                let fill_w = track.width() * (step as f32 / (total - 1) as f32);
+                let fill = Rect::from_min_size(track.min, vec2(fill_w, track.height()));
+                bar_painter.rect_filled(fill, 0.0, shell::INK_2);
+
+                // Draggable thumb
+                let thumb_x = track.min.x + fill_w;
+                let thumb = Rect::from_center_size(pos2(thumb_x, track.center().y), vec2(6.0, 12.0));
+                bar_painter.rect_filled(thumb, 0.0, shell::INK);
+
+                if bar_resp.dragged() {
+                    if let Some(pos) = bar_resp.interact_pointer_pos() {
+                        let t = ((pos.x - track.min.x) / track.width()).clamp(0.0, 1.0);
+                        self.travel_step = ((t * (total - 1) as f32).round() as usize).min(total - 1);
+                    }
+                }
+            }
         });
     }
 
@@ -832,8 +998,11 @@ impl StaxApp {
             }
         }
 
-        // Draw nodes
+        // Draw nodes and collect badge interactions
         let hover_pos = ui.input(|i| i.pointer.hover_pos());
+        let click_pos = if response.clicked() { ptr } else { None };
+        let mut interact_zones: Vec<(stax_graph::NodeId, Vec<crate::graph::NodeInteract>)> = Vec::new();
+
         for node in self.graph.nodes_in_order() {
             let pos = self.node_positions.get(&node.id).copied().unwrap_or(pos2(20.0, 20.0));
             let sp  = to_screen(pos);
@@ -841,7 +1010,58 @@ impl StaxApp {
             let hov = hover_pos.is_some_and(|p| {
                 node_screen_rects.get(&node.id).is_some_and(|r| r.contains(p))
             });
-            crate::graph::draw_node(&painter, sp, node, sel, hov, zoom);
+
+            // Build per-port rank array from overrides
+            let n_inputs = node.inputs.len();
+            let port_ranks: Vec<u8> = (0..n_inputs as u8)
+                .map(|i| self.rank_overrides.get(&(node.id, i)).copied().unwrap_or(0))
+                .collect();
+
+            let adverb_override = self.adverb_overrides.get(&node.id).copied().flatten();
+
+            let scope = if node.is_sink() && !self.scope_samples.is_empty() {
+                Some(self.scope_samples.as_slice())
+            } else {
+                None
+            };
+
+            let (_body, zones) = crate::graph::draw_node(
+                &painter, sp, node, sel, hov, zoom,
+                &port_ranks,
+                adverb_override,
+                scope,
+            );
+            interact_zones.push((node.id, zones));
+        }
+
+        // Handle badge clicks (rank cycle / adverb cycle)
+        // These must come after draw so painter is no longer borrowed
+        if let Some(cp) = click_pos {
+            'outer: for (nid, zones) in &interact_zones {
+                for iz in zones {
+                    if iz.zone.contains(cp) {
+                        match iz.action {
+                            crate::graph::NodeAction::CyclePortRank(port_idx) => {
+                                let current = self.rank_overrides.get(&(*nid, port_idx)).copied().unwrap_or(0);
+                                let next = (current + 1) % 5; // 0=none,1=@,2=@1,3=@2,4=@@
+                                self.rank_overrides.insert((*nid, port_idx), next);
+                            }
+                            crate::graph::NodeAction::CycleAdverb => {
+                                use stax_core::Adverb;
+                                let current = self.adverb_overrides.get(nid).copied().flatten();
+                                let next = match current {
+                                    None                  => Some(Adverb::Reduce),
+                                    Some(Adverb::Reduce)  => Some(Adverb::Scan),
+                                    Some(Adverb::Scan)    => Some(Adverb::Pairwise),
+                                    Some(Adverb::Pairwise) => None,
+                                };
+                                self.adverb_overrides.insert(*nid, next);
+                            }
+                        }
+                        break 'outer;
+                    }
+                }
+            }
         }
 
         // Canvas header overlay

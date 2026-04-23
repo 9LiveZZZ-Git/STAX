@@ -3,6 +3,23 @@ use egui::{Painter, Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use stax_graph::{Graph, Node, NodeId, PortKind};
 use crate::shell;
 
+// ── Public interaction types ───────────────────────────────────────────────
+
+/// Per-node action returned from draw_node when a clickable badge is in the hit zone.
+#[derive(Clone, Debug)]
+pub enum NodeAction {
+    /// port index; caller cycles rank_overrides[(node_id, idx)]
+    CyclePortRank(u8),
+    /// caller cycles adverb_overrides[node_id]
+    CycleAdverb,
+}
+
+/// A clickable zone returned from draw_node together with the action it triggers.
+pub struct NodeInteract {
+    pub zone: Rect,
+    pub action: NodeAction,
+}
+
 // ── Auto-layout ────────────────────────────────────────────────────────────
 
 /// Assign initial canvas positions based on topological depth × column layout.
@@ -60,14 +77,24 @@ fn node_sublabel(node: &Node) -> Option<String> {
     Some(labels.join("  "))
 }
 
-/// Visual size of a node at zoom=1.  Ports protrude PORT_HALF above/below.
-pub fn node_size(node: &Node) -> Vec2 {
+const SCOPE_H: f32 = 36.0;
+
+/// Full visual size of a node at zoom=1, optionally including scope strip height.
+pub fn node_size_full(node: &Node, has_scope: bool) -> Vec2 {
     let label = node_label(node);
     let char_w = 7.2_f32;
     let min_w = shell::NODE_MIN_W.max(label.len() as f32 * char_w + 20.0);
     let has_sub = node_sublabel(node).is_some() || node.adverb.is_some();
-    let h = shell::NODE_HDR_H + if has_sub { shell::NODE_SUB_H } else { 0.0 };
+    let mut h = shell::NODE_HDR_H + if has_sub { shell::NODE_SUB_H } else { 0.0 };
+    if has_scope && node.is_sink() {
+        h += SCOPE_H;
+    }
     vec2(min_w, h)
+}
+
+/// Visual size of a node at zoom=1. Ports protrude PORT_HALF above/below.
+pub fn node_size(node: &Node) -> Vec2 {
+    node_size_full(node, false)
 }
 
 // ── Port position helpers ──────────────────────────────────────────────────
@@ -177,84 +204,105 @@ pub fn draw_port(painter: &Painter, center: Pos2, kind: &PortKind, zoom: f32) {
     }
 }
 
-/// Draw a complete node.  Returns the node's screen rect (including port protrusion).
+/// Draw a complete node.
+///
+/// Returns `(body_rect, interacts)` where `body_rect` is the node header+sub area
+/// (without scope extension) suitable for drag hit-testing, and `interacts` lists
+/// all clickable badge zones the caller should hit-test each frame.
 pub fn draw_node(
     painter: &Painter,
-    screen_pos: Pos2,  // top-left of the node body
+    screen_pos: Pos2,
     node: &Node,
     selected: bool,
     hovered: bool,
     zoom: f32,
-) -> Rect {
-    let sz      = node_size(node) * zoom;
-    let body    = Rect::from_min_size(screen_pos, sz);
+    port_ranks: &[u8],
+    adverb_override: Option<stax_core::Adverb>,
+    scope_samples: Option<&[f32]>,
+) -> (Rect, Vec<NodeInteract>) {
+    let has_scope = scope_samples.is_some() && node.is_sink();
+
+    // base_sz is the node body without scope; used for the returned body rect and
+    // for positioning the scope strip below.
+    let base_sz = node_size(node) * zoom;
+    let full_sz = node_size_full(node, has_scope) * zoom;
+
+    let body    = Rect::from_min_size(screen_pos, base_sz);
+    let full    = Rect::from_min_size(screen_pos, full_sz);
     let label   = node_label(node);
     let is_sink = node.is_sink();
 
-    // Background fill
-    let fill = if is_sink { shell::SURFACE } else { shell::PAPER };
-    painter.rect_filled(body, 0.0, fill);
+    let mut interacts: Vec<NodeInteract> = Vec::new();
 
-    // Border
+    // Background fill — covers the full rect (body + scope)
+    let fill = if is_sink { shell::SURFACE } else { shell::PAPER };
+    painter.rect_filled(full, 0.0, fill);
+
+    // Border drawn around the full node rect
     let border_color = if selected { shell::WARM } else if hovered { shell::INK_2 } else { shell::INK };
     let border_w = if selected { 1.5 * zoom } else { 1.0 * zoom };
-    painter.rect_stroke(body, 0.0, Stroke::new(border_w, border_color), StrokeKind::Outside);
+    painter.rect_stroke(full, 0.0, Stroke::new(border_w, border_color), StrokeKind::Outside);
     if selected {
-        // Extra warm glow: a slightly expanded rect
-        let glow = body.expand(1.0 * zoom);
+        let glow = full.expand(1.0 * zoom);
         painter.rect_stroke(glow, 0.0, Stroke::new(0.5 * zoom, shell::WARM), StrokeKind::Outside);
     }
 
-    // Header text (label + optional adverb badge)
-    let font_id = egui::FontId::new(12.0 * zoom, egui::FontFamily::Monospace);
+    // ── Adverb toggle badge ────────────────────────────────────────────────
+    // Unified rendering: uses adverb_override first, falls back to node.adverb.
+    let eff_adv = adverb_override.or(node.adverb);
+
     let hdr_center = pos2(
         body.center().x,
         body.min.y + shell::NODE_HDR_H * zoom * 0.5,
     );
 
-    if let Some(adv) = &node.adverb {
-        // Adverb badge on the right
-        let adv_str = match adv {
-            stax_core::Adverb::Reduce    => "/",
-            stax_core::Adverb::Scan      => "\\",
-            stax_core::Adverb::Pairwise  => "^",
-        };
-        let adv_label = format!(" {adv_str}");
-        let label_x = body.min.x + 10.0 * zoom;
-        painter.text(
-            pos2(label_x, hdr_center.y),
-            egui::Align2::LEFT_CENTER,
-            &label,
-            font_id.clone(),
-            shell::INK,
-        );
-        // Small bordered adverb badge
-        let badge_text_pos = pos2(body.max.x - 24.0 * zoom, hdr_center.y);
-        painter.text(
-            badge_text_pos,
-            egui::Align2::LEFT_CENTER,
-            adv_label,
-            egui::FontId::new(10.0 * zoom, egui::FontFamily::Monospace),
-            shell::INK_2,
-        );
-    } else {
-        painter.text(
-            hdr_center,
-            egui::Align2::CENTER_CENTER,
-            &label,
-            font_id.clone(),
-            shell::INK,
-        );
-    }
+    let (adv_text, adv_color) = match eff_adv {
+        None                            => ("·", shell::INK_3),
+        Some(stax_core::Adverb::Reduce)   => ("/", shell::WARM),
+        Some(stax_core::Adverb::Scan)     => ("\\", shell::WARM),
+        Some(stax_core::Adverb::Pairwise) => ("^", shell::WARM),
+    };
 
-    // Sub-label row (port name hints)
+    // Badge rect: 18×14 at right side of header
+    let badge_x = body.max.x - 22.0 * zoom;
+    let badge_rect = Rect::from_center_size(
+        pos2(badge_x, hdr_center.y),
+        vec2(18.0 * zoom, 14.0 * zoom),
+    );
+    painter.rect_stroke(
+        badge_rect,
+        0.0,
+        Stroke::new(0.8 * zoom, adv_color),
+        StrokeKind::Outside,
+    );
+    painter.text(
+        badge_rect.center(),
+        egui::Align2::CENTER_CENTER,
+        adv_text,
+        egui::FontId::new(9.0 * zoom, egui::FontFamily::Monospace),
+        adv_color,
+    );
+    interacts.push(NodeInteract { zone: badge_rect, action: NodeAction::CycleAdverb });
+
+    // ── Header label ───────────────────────────────────────────────────────
+    let font_id = egui::FontId::new(12.0 * zoom, egui::FontFamily::Monospace);
+    // Label sits left of the adverb badge; nudge left to avoid overlap
+    let label_x = body.min.x + 10.0 * zoom;
+    painter.text(
+        pos2(label_x, hdr_center.y),
+        egui::Align2::LEFT_CENTER,
+        &label,
+        font_id.clone(),
+        shell::INK,
+    );
+
+    // ── Sub-label row (port name hints) ───────────────────────────────────
     if let Some(sub) = node_sublabel(node) {
         let sub_y = body.min.y + shell::NODE_HDR_H * zoom;
         let sub_rect = Rect::from_min_size(
             pos2(body.min.x, sub_y),
-            vec2(sz.x, shell::NODE_SUB_H * zoom),
+            vec2(base_sz.x, shell::NODE_SUB_H * zoom),
         );
-        // Dotted top divider
         painter.line_segment(
             [sub_rect.left_top(), sub_rect.right_top()],
             Stroke::new(0.5 * zoom, shell::RULE_2),
@@ -268,19 +316,60 @@ pub fn draw_node(
         );
     }
 
-    // Input ports (top)
+    // ── Scope strip (sink nodes only) ──────────────────────────────────────
+    if has_scope {
+        let scope_rect = Rect::from_min_size(
+            pos2(body.min.x, body.min.y + base_sz.y),
+            vec2(full_sz.x, SCOPE_H * zoom),
+        );
+        // Thin divider above the scope
+        painter.line_segment(
+            [scope_rect.left_top(), scope_rect.right_top()],
+            Stroke::new(0.5 * zoom, shell::RULE_2),
+        );
+        crate::scope::draw_scope(painter, scope_rect, scope_samples.unwrap_or(&[]));
+    }
+
+    // ── Input ports (top) + rank badges ───────────────────────────────────
+    let badge_font = egui::FontId::new(
+        8.0 * zoom.sqrt().max(0.4),
+        egui::FontFamily::Monospace,
+    );
     for (idx, port) in node.inputs.iter().enumerate() {
         let center = port_screen_pos(screen_pos, node, idx as u8, false);
         draw_port(painter, center, &port.kind, zoom);
+
+        // Rank badge just above-right of the port square
+        let rank = port_ranks.get(idx).copied().unwrap_or(0);
+        let badge_texts = ["·", "@", "@1", "@2", "@@"];
+        let rank_text = badge_texts.get(rank as usize).copied().unwrap_or("·");
+        let rank_color = if rank > 0 { shell::WARM } else { shell::INK_3 };
+        let badge_center = pos2(
+            center.x + 5.0 * zoom,
+            center.y - 8.0 * zoom,
+        );
+        painter.text(
+            badge_center,
+            egui::Align2::LEFT_CENTER,
+            rank_text,
+            badge_font.clone(),
+            rank_color,
+        );
+        // 16×12 hit rect centered on the badge
+        let rank_zone = Rect::from_center_size(badge_center, vec2(16.0 * zoom, 12.0 * zoom));
+        interacts.push(NodeInteract {
+            zone: rank_zone,
+            action: NodeAction::CyclePortRank(idx as u8),
+        });
     }
 
-    // Output ports (bottom)
+    // ── Output ports (bottom) ──────────────────────────────────────────────
     for (idx, port) in node.outputs.iter().enumerate() {
         let center = port_screen_pos(screen_pos, node, idx as u8, true);
         draw_port(painter, center, &port.kind, zoom);
     }
 
-    body
+    (body, interacts)
 }
 
 /// Draw the canvas-level view tab strip (floating in the top-left of the canvas).
