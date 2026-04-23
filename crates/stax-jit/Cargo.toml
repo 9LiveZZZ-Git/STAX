@@ -1,0 +1,11 @@
+[package]
+name    = "stax-jit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# M10: cranelift JIT for pure Signal+Real subgraphs.
+# cranelift added at M10; this crate is scaffold-only for M0.
+
+[dependencies]
+stax-core = { workspace = true }

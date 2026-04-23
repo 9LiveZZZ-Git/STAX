@@ -1,0 +1,13 @@
+[package]
+name    = "stax-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# M8: VST3/CLAP plugin target via nih-plug.
+# nih-plug added at M8; this crate is scaffold-only for M0.
+
+[dependencies]
+stax-core  = { workspace = true }
+stax-eval  = { workspace = true }
+stax-audio = { workspace = true }

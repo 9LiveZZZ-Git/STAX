@@ -1,0 +1,21 @@
+[package]
+name = "stax-repl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "stax-smoke"
+path = "smoke.rs"
+
+[[bin]]
+name = "stax-repl"
+path = "repl.rs"
+
+[dependencies]
+stax-core   = { workspace = true }
+stax-parser = { workspace = true }
+stax-eval   = { workspace = true }
+stax-dsp    = { workspace = true }
+stax-audio  = { workspace = true }
+anyhow      = { workspace = true }

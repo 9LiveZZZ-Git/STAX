@@ -1,0 +1,77 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Cargo lock — keep for workspace with binaries
+# Cargo.lock
+
+# Backup files
+**/*.rs.bk
+*.orig
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.direnv/
+.envrc
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.pdb
+
+# Linux
+*~
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Profiling / benchmarks
+flamegraph.svg
+perf.data
+perf.data.old
+cachegrind.out.*
+massif.out.*
+
+# Test output / coverage
+lcov.info
+*.profdata
+*.profraw
+tarpaulin-report.html
+cobertura.xml
+
+# Generated assets
+/design/dist/
+*.wasm
+*.wat
+
+# Node (if any tooling is added)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Python (scripts)
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+
+# Temporary
+*.tmp
+*.bak
+*.log

@@ -1,0 +1,11 @@
+[package]
+name    = "stax-gpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# M9: wgpu compute operators — additive synthesis, granular, FDTD, convolution.
+# wgpu added at M9; this crate is scaffold-only for M0.
+
+[dependencies]
+stax-core = { workspace = true }

@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA / JACK headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+      - name: cargo check
+        run: cargo check --workspace
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA / JACK headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+      - name: cargo test
+        run: cargo test --workspace
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA / JACK headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+      - name: cargo clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+  milestones:
+    name: Milestone Checker
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA / JACK headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+
+      - name: "M1 — 365/365 SAPF unit tests"
+        run: |
+          cargo test -p stax-eval --test sapf_unit 2>&1 | tee /tmp/m1.txt
+          grep -E "^test result" /tmp/m1.txt
+          PASSED=$(grep -oP '\d+ passed' /tmp/m1.txt | grep -oP '\d+' | tail -1)
+          echo "SAPF tests passed: $PASSED / 365"
+          [ "$PASSED" = "365" ] || { echo "M1 FAIL: expected 365 passed, got $PASSED"; exit 1; }
+
+      - name: "M2 — rank-polymorphic dispatch"
+        run: |
+          cargo test -p stax-eval -- rank 2>&1 | tee /tmp/m2.txt
+          grep -E "^test result" /tmp/m2.txt
+          echo "M2 rank tests:"
+          grep -E "test .* \.\.\." /tmp/m2.txt || true
+
+      - name: "M3 — DSP suite"
+        run: |
+          cargo test -p stax-dsp 2>&1 | tee /tmp/m3.txt
+          grep -E "^test result" /tmp/m3.txt
+          PASSED=$(grep -oP '\d+ passed' /tmp/m3.txt | grep -oP '\d+' | tail -1)
+          echo "stax-dsp tests passed: $PASSED"
+          [ "$PASSED" -ge "6" ] || { echo "M3 FAIL: expected ≥6 stax-dsp tests, got $PASSED"; exit 1; }
+
+      - name: "Total test count"
+        run: |
+          cargo test --workspace 2>&1 | grep -E "^test result"
+          TOTAL=$(cargo test --workspace 2>&1 | grep -oP '\d+ passed' | grep -oP '\d+' | awk '{s+=$1}END{print s}')
+          echo "Total tests passed: $TOTAL"

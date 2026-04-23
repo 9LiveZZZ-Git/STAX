@@ -1,0 +1,58 @@
+[workspace]
+resolver = "2"
+members = [
+    # active
+    "crates/stax-core",
+    "crates/stax-parser",
+    "crates/stax-eval",
+    "crates/stax-dsp",
+    "crates/stax-audio",
+    "examples",
+    # deferred scaffolding (populated at their milestones)
+    "crates/stax-io",      # M3
+    "crates/stax-graph",   # M4
+    "crates/stax-editor",  # M5
+    "crates/stax-arrange", # M7
+    "crates/stax-plugin",  # M8
+    "crates/stax-gpu",     # M9
+    "crates/stax-jit",     # M10
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/9LiveZZZ-Git/STAX"
+
+[workspace.dependencies]
+stax-core    = { path = "crates/stax-core" }
+stax-parser  = { path = "crates/stax-parser" }
+stax-eval    = { path = "crates/stax-eval" }
+stax-dsp     = { path = "crates/stax-dsp" }
+stax-audio   = { path = "crates/stax-audio" }
+stax-io      = { path = "crates/stax-io" }
+stax-graph   = { path = "crates/stax-graph" }
+stax-editor  = { path = "crates/stax-editor" }
+stax-arrange = { path = "crates/stax-arrange" }
+stax-plugin  = { path = "crates/stax-plugin" }
+stax-gpu     = { path = "crates/stax-gpu" }
+stax-jit     = { path = "crates/stax-jit" }
+
+thiserror   = "1"
+anyhow      = "1"
+num-complex = "0.4"
+
+# M3 — audio
+cpal   = "0.15"
+wide   = "0.7"
+
+# M3 — FFT / spectrograms
+realfft = "3"
+
+# M3 — MIDI / OSC
+midir = "0.9"
+rosc  = "0.9"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

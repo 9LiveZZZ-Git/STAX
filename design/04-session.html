@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>stax — session view (M7)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:   #f4f1ea;
+    --paper-2: #efebe1;
+    --surface: #ebe7dd;
+    --surface-2: #e0dbcc;
+    --rule:    #d4cfc3;
+    --rule-2:  #bcb5a4;
+    --ink:     #1a1a1a;
+    --ink-2:   #6b6558;
+    --ink-3:   #9a9383;
+
+    --port-real:   #1a1a1a;
+    --port-signal: #c94820;
+    --port-stream: #2d5a4a;
+    --port-fun:    #6b4e8a;
+    --port-form:   #8a6b2a;
+
+    --warm:    #c94820;
+    --cool:    #2d5a4a;
+    --queued:  #d4a017;
+
+    --t-kick: #8a4a4a;
+    --t-bass: #2d5a4a;
+    --t-pad:  #6b4e8a;
+    --t-lead: #c94820;
+    --t-fx:   #8a6b2a;
+
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--ink);
+    background: var(--paper);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: grid;
+    grid-template-rows: 40px 28px 1fr 38px;
+    height: 100vh;
+    width: 100vw;
+    max-width: 1600px;
+    margin: 0 auto;
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+  }
+
+  /* ===== top bar (consistent) ===== */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  header .brand {
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    padding-right: 14px;
+    border-right: 1px solid var(--rule);
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+  header nav { display: flex; gap: 14px; color: var(--ink-2); }
+  header .spacer { flex: 1; }
+  header .stat {
+    font-size: 11px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+  }
+  header .stat .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--warm);
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  header .xport {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding-left: 14px;
+    border-left: 1px solid var(--rule);
+    height: 100%;
+  }
+  header .xport .pos {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  header .xport .pos .b { color: var(--ink-2); }
+  header .xport .pos .sub { color: var(--ink-3); font-size: 10px; margin-left: 4px; }
+  header .xport .bpm {
+    border: 1px solid var(--rule);
+    padding: 3px 8px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  header .xport .bpm .b { color: var(--ink-3); font-weight: 400; margin-left: 4px; font-size: 9px; letter-spacing: 0.10em; }
+  header .xport .ts { color: var(--ink-2); font-size: 11px; }
+  header .xport .link {
+    font-size: 10px;
+    color: var(--cool);
+    border: 1px solid var(--cool);
+    padding: 1px 5px;
+    letter-spacing: 0.10em;
+  }
+  header .xport .play.active { color: var(--warm); }
+  header .xport .play { color: var(--ink-3); }
+
+  /* ===== tabs ===== */
+  .tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    align-items: center;
+  }
+  .tabs .tab {
+    padding: 4px 14px;
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-right: 1px dotted var(--rule-2);
+    cursor: default;
+  }
+  .tabs .tab.active {
+    color: var(--ink);
+    background: var(--paper);
+    font-weight: 500;
+    border-bottom: 1.5px solid var(--warm);
+    margin-bottom: -1px;
+    padding-bottom: 5px;
+  }
+  .tabs .spacer { flex: 1; }
+  .tabs .meta {
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+  }
+  .tabs .meta .name { color: var(--ink); font-weight: 500; }
+
+  /* ===== main: scenes | grid | inspector ===== */
+  .main {
+    display: grid;
+    grid-template-columns: 188px 1fr 240px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ===== scene rail (left) ===== */
+  .scenes {
+    border-right: 1px solid var(--rule);
+    background: var(--paper);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .scenes .header-cell {
+    height: 38px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .scene-row {
+    height: 88px;
+    padding: 8px 12px 8px 14px;
+    border-bottom: 1px dotted var(--rule-2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: default;
+  }
+  .scene-row .num {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-3);
+    width: 18px;
+    text-align: right;
+  }
+  .scene-row .body {
+    flex: 1;
+    min-width: 0;
+  }
+  .scene-row .label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+  }
+  .scene-row .meta {
+    font-size: 10px;
+    color: var(--ink-2);
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+  }
+  .scene-row .launch {
+    width: 22px; height: 22px;
+    border: 1px solid var(--ink-3);
+    color: var(--ink-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .scene-row .launch:hover {
+    border-color: var(--warm);
+    color: var(--warm);
+  }
+  .scene-row.active {
+    background: var(--paper-2);
+    border-left: 3px solid var(--warm);
+    padding-left: 11px;
+  }
+  .scene-row.active .label { color: var(--warm); }
+  .scene-row.active .num { color: var(--warm); }
+  .scene-row.active .launch {
+    border-color: var(--warm);
+    background: var(--warm);
+    color: var(--paper);
+  }
+  .scene-row.queued .launch {
+    border-color: var(--queued);
+    color: var(--queued);
+    animation: pulse 0.7s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
+  /* stop-all row */
+  .scenes .stop-cell {
+    margin-top: auto;
+    border-top: 2px solid var(--ink);
+    background: var(--surface);
+    padding: 10px 14px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 10px;
+    color: var(--ink-2);
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .scenes .stop-cell .stop-all {
+    margin-left: auto;
+    width: 22px; height: 22px;
+    border: 1.5px solid var(--ink);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+  }
+
+  /* ===== grid (center) — track columns × scene rows ===== */
+  .grid-wrap {
+    overflow: auto;
+    background: var(--paper);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    min-width: 100%;
+    height: 100%;
+  }
+  .col {
+    border-right: 1px dotted var(--rule-2);
+    display: flex;
+    flex-direction: column;
+  }
+  .col:last-child { border-right: none; }
+
+  /* per-track header at top of each column */
+  .col-head {
+    height: 38px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .col-head .swatch {
+    width: 4px; height: 18px;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+  .col-head .nm {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+  }
+  .col-head .tag {
+    font-size: 9px;
+    color: var(--ink-3);
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    margin-left: auto;
+  }
+
+  /* clip cells */
+  .cell {
+    height: 88px;
+    border-bottom: 1px dotted var(--rule-2);
+    padding: 6px;
+    position: relative;
+  }
+  .cell.empty {
+    background:
+      radial-gradient(circle, var(--rule-2) 0.5px, transparent 0.6px) 0 0 / 12px 12px,
+      transparent;
+  }
+  .cell.empty:hover { background-color: var(--paper-2); }
+
+  /* the clip itself inside a cell */
+  .clip {
+    position: absolute;
+    inset: 6px;
+    background: var(--paper);
+    border: 1px solid currentColor;
+    overflow: hidden;
+    cursor: default;
+    display: flex;
+    flex-direction: column;
+  }
+  .clip .name {
+    font-size: 10px;
+    color: var(--paper);
+    background: currentColor;
+    padding: 2px 6px;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .clip .name .tx { color: var(--paper); }
+  .clip .name .marks {
+    color: var(--paper);
+    opacity: 0.85;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+  .clip .body {
+    flex: 1;
+    padding: 4px 6px;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 9px;
+    line-height: 1.3;
+  }
+  .clip .body code { font-family: var(--mono); color: var(--ink); }
+
+  /* clip color via track color */
+  .clip.kick { color: var(--t-kick); }
+  .clip.bass { color: var(--t-bass); }
+  .clip.pad  { color: var(--t-pad); }
+  .clip.lead { color: var(--t-lead); }
+  .clip.fx   { color: var(--t-fx); }
+
+  /* states */
+  .clip.playing .name {
+    background: var(--warm);
+    color: var(--paper);
+  }
+  .clip.playing {
+    border-color: var(--warm);
+    box-shadow: 0 0 0 1.5px var(--warm);
+  }
+  .clip.playing .name .marks {
+    animation: blink 1s ease-in-out infinite;
+  }
+  .clip.queued {
+    border-color: var(--queued);
+    border-style: dashed;
+    border-width: 1.5px;
+    animation: pulse 0.7s ease-in-out infinite;
+  }
+  .clip.queued .name {
+    background: var(--queued);
+    color: var(--paper);
+  }
+  .clip.selected {
+    box-shadow: 0 0 0 2px var(--warm);
+    border-color: var(--warm);
+  }
+
+  /* pattern dots */
+  .pattern {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    margin-top: 2px;
+  }
+  .pattern span {
+    height: 5px;
+    background: currentColor;
+    opacity: 0.18;
+  }
+  .pattern span.on { opacity: 1; }
+
+  /* mini graph thumbnail */
+  .thumb {
+    position: relative;
+    height: 40px;
+    margin-top: 2px;
+  }
+  .thumb .n {
+    position: absolute;
+    font-size: 8px;
+    background: var(--paper);
+    border: 0.5px solid var(--ink);
+    padding: 1px 3px;
+  }
+  .thumb svg {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+  }
+
+  /* per-track stop button at bottom of column */
+  .col-stop {
+    margin-top: auto;
+    height: 50px;
+    border-top: 2px solid var(--ink);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 10px;
+  }
+  .col-stop .btn {
+    width: 22px; height: 22px;
+    border: 1.5px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .col-stop .btn:hover { background: var(--ink); color: var(--paper); }
+  .col-stop .vol {
+    flex: 1;
+    font-size: 9px;
+    color: var(--ink-2);
+    text-align: right;
+    letter-spacing: 0.04em;
+  }
+  .col-stop .vol .val {
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  /* ===== inspector ===== */
+  .inspector {
+    border-left: 1px solid var(--rule);
+    background: var(--paper);
+    padding: 14px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .inspector h3 {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px dotted var(--rule-2);
+    padding-bottom: 5px;
+  }
+  .inspector .selected-name {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .inspector .selected-name .clip-tag {
+    font-size: 9px;
+    background: var(--warm);
+    color: var(--paper);
+    padding: 1px 5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+  }
+  .inspector .selected-name .nm {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--warm);
+  }
+  .inspector .kv {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    row-gap: 4px;
+    column-gap: 10px;
+    font-size: 11px;
+  }
+  .inspector .kv .k { color: var(--ink-2); }
+  .inspector .kv .v { color: var(--ink); }
+  .inspector .kv .v.warm { color: var(--warm); }
+  .inspector .kv .v.fun  { color: var(--port-fun); }
+  .inspector .kv .v.q    { color: var(--queued); }
+  .inspector .expr-box {
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--ink);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .inspector .expr-box .br  { color: var(--ink-2); }
+  .inspector .expr-box .num { color: var(--ink); }
+  .inspector .expr-box .op  { color: var(--port-signal); }
+  .inspector .expr-box .word{ color: var(--ink); }
+  .inspector .open-graph {
+    font-size: 10px;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    padding: 4px 8px;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+  }
+  .inspector .open-graph:hover {
+    border-color: var(--warm);
+    color: var(--warm);
+  }
+  .inspector .small {
+    font-size: 10px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .inspector .midi-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    padding: 2px 0;
+    border-bottom: 1px dotted var(--rule-2);
+  }
+  .inspector .midi-row .k { color: var(--ink-2); }
+  .inspector .midi-row .v { color: var(--ink); font-weight: 500; }
+
+  /* ===== bottom bar ===== */
+  .botbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 14px;
+    border-top: 1px solid var(--rule);
+    background: var(--paper);
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+  .botbar .meter { display: flex; gap: 4px; align-items: center; }
+  .botbar .meter .bar {
+    width: 80px; height: 6px;
+    background: var(--surface);
+    border: 1px solid var(--rule-2);
+    position: relative;
+  }
+  .botbar .meter .bar .fill {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    background: var(--cool);
+  }
+  .botbar .meter .bar .peak {
+    position: absolute; top: 0; bottom: 0;
+    width: 1px; background: var(--warm);
+  }
+  .botbar .reload {
+    color: var(--port-fun);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--port-fun);
+    padding: 2px 8px;
+  }
+  .botbar .quant {
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 2px 8px;
+  }
+  .botbar .quant .k { color: var(--ink-3); margin-right: 4px; }
+  .botbar .spacer { flex: 1; }
+
+  /* legend */
+  .legend {
+    display: flex;
+    gap: 14px;
+    font-size: 10px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+    align-items: center;
+  }
+  .legend .sw {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend .sw::before {
+    content: "";
+    width: 9px; height: 9px;
+    border: 1px solid currentColor;
+  }
+  .legend .sw.playing::before { background: var(--warm); border-color: var(--warm); }
+  .legend .sw.queued::before { border-color: var(--queued); border-style: dashed; }
+  .legend .sw.stopped::before { background: var(--paper); border-color: var(--ink); }
+  .legend .sw.empty::before { border-style: dotted; border-color: var(--rule-2); }
+
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <header>
+    <span class="brand">STAX</span>
+    <nav>
+      <a>file</a><a>edit</a><a>view</a><a>run</a><a>help</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="stat"><span class="dot"></span>audio · 96 kHz · 128</span>
+    <span class="xport">
+      <span class="play active">▶</span>
+      <span class="play">■</span>
+      <span class="pos">5<span class="b">.</span>2<span class="b">.</span>3<span class="sub">/16</span></span>
+      <span class="bpm">124.0<span class="b">BPM</span></span>
+      <span class="ts">4/4</span>
+      <span class="link">LINK · 3</span>
+    </span>
+  </header>
+
+  <!-- ===================== TABS ===================== -->
+  <div class="tabs">
+    <span class="tab">graph</span>
+    <span class="tab">arrangement</span>
+    <span class="tab active">session</span>
+    <span class="tab">mixer</span>
+    <span class="spacer"></span>
+    <span class="meta">set: <span class="name">night_drive.stax</span> · scene 3 active</span>
+  </div>
+
+  <!-- ===================== MAIN ===================== -->
+  <div class="main">
+
+    <!-- ===== scene rail (left) ===== -->
+    <div class="scenes">
+      <div class="header-cell">scenes</div>
+
+      <!-- scene 1 -->
+      <div class="scene-row">
+        <span class="num">01</span>
+        <div class="body">
+          <div class="label">intro</div>
+          <div class="meta">8 bars · q 1 bar</div>
+        </div>
+        <div class="launch">▶</div>
+      </div>
+
+      <!-- scene 2 -->
+      <div class="scene-row">
+        <span class="num">02</span>
+        <div class="body">
+          <div class="label">groove</div>
+          <div class="meta">16 bars</div>
+        </div>
+        <div class="launch">▶</div>
+      </div>
+
+      <!-- scene 3 - ACTIVE -->
+      <div class="scene-row active">
+        <span class="num">03</span>
+        <div class="body">
+          <div class="label">build</div>
+          <div class="meta">16 bars · playing</div>
+        </div>
+        <div class="launch">▶</div>
+      </div>
+
+      <!-- scene 4 - QUEUED -->
+      <div class="scene-row queued">
+        <span class="num">04</span>
+        <div class="body">
+          <div class="label">drop</div>
+          <div class="meta" style="color: var(--queued);">queued · next bar</div>
+        </div>
+        <div class="launch">▶</div>
+      </div>
+
+      <!-- scene 5 -->
+      <div class="scene-row">
+        <span class="num">05</span>
+        <div class="body">
+          <div class="label">outro</div>
+          <div class="meta">free length</div>
+        </div>
+        <div class="launch">▶</div>
+      </div>
+
+      <!-- stop-all -->
+      <div class="stop-cell">
+        stop all
+        <span class="stop-all">■</span>
+      </div>
+    </div>
+
+    <!-- ===== grid (center) ===== -->
+    <div class="grid-wrap">
+      <div class="grid">
+
+        <!-- ============ KICK column ============ -->
+        <div class="col">
+          <div class="col-head" style="color: var(--t-kick);">
+            <div class="swatch"></div>
+            <div class="nm">kick</div>
+            <div class="tag">drums</div>
+          </div>
+
+          <!-- scene 1: empty -->
+          <div class="cell empty"></div>
+
+          <!-- scene 2: stopped -->
+          <div class="cell">
+            <div class="clip kick">
+              <div class="name">kick.4 <span class="marks">↻</span></div>
+              <div class="body">
+                <div class="pattern">
+                  <span class="on"></span><span></span><span class="on"></span><span></span>
+                  <span class="on"></span><span class="on"></span><span></span><span class="on"></span>
+                </div>
+                <code style="font-size: 8px;">"x.x.xx.x"</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 3: PLAYING (active scene) -->
+          <div class="cell">
+            <div class="clip kick playing">
+              <div class="name">kick.4 <span class="marks">↻ ▸</span></div>
+              <div class="body">
+                <div class="pattern">
+                  <span class="on"></span><span></span><span class="on"></span><span></span>
+                  <span class="on"></span><span class="on"></span><span></span><span class="on"></span>
+                </div>
+                <code style="font-size: 8px;">"x.x.xx.x"</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 4: QUEUED -->
+          <div class="cell">
+            <div class="clip kick queued">
+              <div class="name">kick.var <span class="marks">↻ Q</span></div>
+              <div class="body">
+                <div class="pattern">
+                  <span class="on"></span><span></span><span class="on"></span><span class="on"></span>
+                  <span class="on"></span><span></span><span class="on"></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 5: empty -->
+          <div class="cell empty"></div>
+
+          <div class="col-stop">
+            <span class="btn">■</span>
+            <span class="vol">vol <span class="val">0.0</span></span>
+          </div>
+        </div>
+
+        <!-- ============ BASS column ============ -->
+        <div class="col">
+          <div class="col-head" style="color: var(--t-bass);">
+            <div class="swatch"></div>
+            <div class="nm">bass</div>
+            <div class="tag">stax</div>
+          </div>
+
+          <!-- scene 1: empty -->
+          <div class="cell empty"></div>
+
+          <!-- scene 2: stopped, code text -->
+          <div class="cell">
+            <div class="clip bass">
+              <div class="name">walk.6bar <span class="marks">↻</span></div>
+              <div class="body">
+                <code>[110 165 220]</code><br>
+                <code>cycle 0 sinosc</code><br>
+                <code>.18 *</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 3: PLAYING (selected) -->
+          <div class="cell">
+            <div class="clip bass playing selected">
+              <div class="name">walk.6bar <span class="marks">↻ ▸</span></div>
+              <div class="body">
+                <code>[110 165 220]</code><br>
+                <code>cycle 0 sinosc</code><br>
+                <code>.18 *  ,cutoff lpf</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 4: stopped variation -->
+          <div class="cell">
+            <div class="clip bass">
+              <div class="name">walk.var <span class="marks">↻</span></div>
+              <div class="body">
+                <code>[110 220 110 165]</code><br>
+                <code>cycle 0 saw</code><br>
+                <code>.15 *</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 5: empty -->
+          <div class="cell empty"></div>
+
+          <div class="col-stop">
+            <span class="btn">■</span>
+            <span class="vol">vol <span class="val">−3.0</span></span>
+          </div>
+        </div>
+
+        <!-- ============ PAD column ============ -->
+        <div class="col">
+          <div class="col-head" style="color: var(--t-pad);">
+            <div class="swatch"></div>
+            <div class="nm">pad</div>
+            <div class="tag">stax</div>
+          </div>
+
+          <!-- scene 1: PLAYING (carries from intro) -->
+          <div class="cell">
+            <div class="clip pad playing">
+              <div class="name">pad.drone <span class="marks">↻ ▸</span></div>
+              <div class="body">
+                <div class="thumb">
+                  <svg viewBox="0 0 120 40" preserveAspectRatio="none">
+                    <path d="M 6 8 L 40 8" stroke="var(--port-real)" stroke-width="0.8" fill="none"/>
+                    <path d="M 6 22 L 40 22" stroke="var(--port-real)" stroke-width="0.8" fill="none"/>
+                    <path d="M 50 14 L 80 14" stroke="var(--port-signal)" stroke-width="0.8" fill="none"/>
+                    <path d="M 90 22 L 110 32" stroke="var(--port-signal)" stroke-width="0.8" fill="none"/>
+                  </svg>
+                  <div class="n" style="left: 0; top: 2px;">[ ]</div>
+                  <div class="n" style="left: 38px; top: 8px;">sin</div>
+                  <div class="n" style="left: 80px; top: 8px;">+/</div>
+                  <div class="n" style="right: 0; bottom: 0;">·</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 2: still playing (drone) -->
+          <div class="cell">
+            <div class="clip pad playing">
+              <div class="name">pad.drone <span class="marks">↻ ▸</span></div>
+              <div class="body">
+                <code>[110 220 277 330]</code><br>
+                <code>0 sinosc +/ .04 *</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 3: shimmer (different clip launched) -->
+          <div class="cell">
+            <div class="clip pad playing">
+              <div class="name">pad.shimmer <span class="marks">↻ ▸</span></div>
+              <div class="body">
+                <code>[110 220 277 330 415]</code><br>
+                <code>0 sinosc +/ .05 *</code><br>
+                <code>reverb 0.7</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 4: empty -->
+          <div class="cell empty"></div>
+
+          <!-- scene 5: fade -->
+          <div class="cell">
+            <div class="clip pad">
+              <div class="name">pad.fade</div>
+              <div class="body">
+                <code>pad.shimmer</code><br>
+                <code>8bars fadeout</code>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-stop">
+            <span class="btn">■</span>
+            <span class="vol">vol <span class="val">−6.0</span></span>
+          </div>
+        </div>
+
+        <!-- ============ LEAD column ============ -->
+        <div class="col">
+          <div class="col-head" style="color: var(--t-lead);">
+            <div class="swatch"></div>
+            <div class="nm">lead</div>
+            <div class="tag">stax · solo</div>
+          </div>
+
+          <!-- scene 1: empty -->
+          <div class="cell empty"></div>
+
+          <!-- scene 2: empty -->
+          <div class="cell empty"></div>
+
+          <!-- scene 3: PLAYING -->
+          <div class="cell">
+            <div class="clip lead playing">
+              <div class="name">riff.B <span class="marks">↻ ▸</span></div>
+              <div class="body">
+                <code>"3 5 . 7 . 3 5 ."</code><br>
+                <code>scl 0 saw</code><br>
+                <code>.14 *</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 4: variation -->
+          <div class="cell">
+            <div class="clip lead">
+              <div class="name">riff.A <span class="marks">↻</span></div>
+              <div class="body">
+                <code>"3 . 5 7 . 5 3 ."</code><br>
+                <code>scl 7 mix</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 5: empty -->
+          <div class="cell empty"></div>
+
+          <div class="col-stop">
+            <span class="btn">■</span>
+            <span class="vol">vol <span class="val">−4.5</span></span>
+          </div>
+        </div>
+
+        <!-- ============ FX column ============ -->
+        <div class="col">
+          <div class="col-head" style="color: var(--t-fx);">
+            <div class="swatch"></div>
+            <div class="nm">fx</div>
+            <div class="tag">send</div>
+          </div>
+
+          <!-- scene 1: noise wash playing -->
+          <div class="cell">
+            <div class="clip fx playing">
+              <div class="name">noise.wash <span class="marks">↻ ▸</span></div>
+              <div class="body">
+                <code>pink .08 *</code><br>
+                <code>1k 4k bpf</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 2: empty -->
+          <div class="cell empty"></div>
+
+          <!-- scene 3: noise.up playing -->
+          <div class="cell">
+            <div class="clip fx playing">
+              <div class="name">noise.up <span class="marks">▸</span></div>
+              <div class="body">
+                <code>pink env</code><br>
+                <code>4bars rise</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 4: tail -->
+          <div class="cell">
+            <div class="clip fx">
+              <div class="name">noise.tail</div>
+              <div class="body">
+                <code>pink .04 *</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- scene 5: empty -->
+          <div class="cell empty"></div>
+
+          <div class="col-stop">
+            <span class="btn">■</span>
+            <span class="vol">vol <span class="val">−12.0</span></span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== inspector (right) ===== -->
+    <aside class="inspector">
+      <h3>clip</h3>
+      <div class="selected-name">
+        <span class="clip-tag">clip</span>
+        <span class="nm">walk.6bar</span>
+      </div>
+
+      <div class="kv">
+        <span class="k">track</span><span class="v">02 · bass</span>
+        <span class="k">scene</span><span class="v warm">03 · build</span>
+        <span class="k">state</span><span class="v warm">▸ playing</span>
+        <span class="k">launch q</span><span class="v">1 bar</span>
+        <span class="k">loop</span><span class="v">on · 6 bar</span>
+        <span class="k">launch mode</span><span class="v fun">trigger</span>
+      </div>
+
+      <h3>expression</h3>
+      <div class="expr-box"><span class="br">[</span> <span class="num">110</span> <span class="num">165</span> <span class="num">220</span> <span class="br">]</span> <span class="word">cycle</span>
+  <span class="num">0</span> <span class="word">sinosc</span> <span class="num">.18</span> <span class="op">×</span>
+  ,<span class="word">cutoff</span> <span class="word">lpf</span></div>
+      <div class="open-graph">⤢  open in graph editor</div>
+
+      <h3>launch</h3>
+      <div class="midi-row">
+        <span class="k">midi note</span><span class="v">C2 · ch 16</span>
+      </div>
+      <div class="midi-row">
+        <span class="k">key</span><span class="v">⇧ Q</span>
+      </div>
+      <div class="midi-row">
+        <span class="k">follow</span><span class="v fun">scene · auto</span>
+      </div>
+
+      <div class="small">
+        On scene change, clip fires at the next bar. Held under
+        <span style="color: var(--warm); font-weight: 500;">scene 4 → drop</span>;
+        currently <span style="color: var(--queued); font-weight: 500;">kick.var queued</span>
+        to swap on bar.
+      </div>
+    </aside>
+  </div>
+
+  <!-- ===================== BOTTOM BAR ===================== -->
+  <div class="botbar">
+    <span class="meter">
+      <span style="color: var(--ink-2); letter-spacing: 0.04em;">L</span>
+      <span class="bar"><span class="fill" style="width: 62%;"></span><span class="peak" style="left: 71%;"></span></span>
+      <span style="color: var(--ink-2); letter-spacing: 0.04em;">R</span>
+      <span class="bar"><span class="fill" style="width: 64%;"></span><span class="peak" style="left: 73%;"></span></span>
+    </span>
+    <span class="reload">↻ hot-reload · bar boundary</span>
+    <span class="quant"><span class="k">launch q</span>1 bar</span>
+    <span class="spacer"></span>
+    <span class="legend">
+      <span class="sw playing">playing</span>
+      <span class="sw queued">queued</span>
+      <span class="sw stopped">stopped</span>
+      <span class="sw empty">empty</span>
+    </span>
+  </div>
+
+</div>
+</body>
+</html>

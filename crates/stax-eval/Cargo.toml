@@ -1,0 +1,15 @@
+[package]
+name = "stax-eval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stax-core  = { workspace = true }
+stax-dsp   = { workspace = true }
+stax-audio = { workspace = true }
+stax-io    = { workspace = true }
+thiserror  = { workspace = true }
+
+[dev-dependencies]
+stax-parser = { workspace = true }

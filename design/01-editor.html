@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>stax — editor mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:   #f4f1ea;
+    --surface: #ebe7dd;
+    --rule:    #d4cfc3;
+    --rule-2:  #bcb5a4;
+    --ink:     #1a1a1a;
+    --ink-2:   #6b6558;
+    --ink-3:   #9a9383;
+
+    --port-real:   #1a1a1a;
+    --port-signal: #c94820;
+    --port-stream: #2d5a4a;
+    --port-fun:    #6b4e8a;
+    --port-form:   #8a6b2a;
+
+    --warm:    #c94820;
+    --cool:    #2d5a4a;
+
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--ink);
+    background: var(--paper);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .app {
+    display: grid;
+    grid-template-rows: 40px 1fr 120px 34px;
+    height: 100vh;
+    width: 100vw;
+    max-width: 1600px;
+    margin: 0 auto;
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+  }
+
+  /* -------- top bar -------- */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+  }
+  header .brand {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding-right: 14px;
+    border-right: 1px solid var(--rule);
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+  header nav {
+    display: flex;
+    gap: 14px;
+    font-weight: 400;
+    color: var(--ink-2);
+  }
+  header nav a { color: inherit; text-decoration: none; cursor: default; }
+  header nav a:hover { color: var(--ink); }
+  header .spacer { flex: 1; }
+  header .stat {
+    font-size: 11px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+  }
+  header .stat .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--warm);
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  header .transport {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding-left: 14px;
+    border-left: 1px solid var(--rule);
+    height: 100%;
+    font-weight: 500;
+  }
+  header .transport .stop {
+    color: var(--warm);
+    letter-spacing: 0.06em;
+    cursor: pointer;
+  }
+
+  /* -------- main row -------- */
+  .main {
+    display: grid;
+    grid-template-columns: 200px 1fr 240px;
+    border-bottom: 1px solid var(--rule);
+    min-height: 0;
+  }
+
+  /* -------- library -------- */
+  .library {
+    border-right: 1px solid var(--rule);
+    overflow-y: auto;
+    padding: 14px 0;
+    background: var(--paper);
+  }
+  .library h3 {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 0 14px 6px;
+    border-bottom: 1px dotted var(--rule-2);
+    margin-bottom: 8px;
+  }
+  .library .group { margin-bottom: 16px; }
+  .library .group-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 14px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink);
+    cursor: default;
+  }
+  .library .group-head .chev { color: var(--ink-3); }
+  .library .items {
+    padding: 4px 14px 4px 26px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px 8px;
+  }
+  .library .items span {
+    font-size: 11px;
+    color: var(--ink-2);
+    cursor: grab;
+    padding: 1px 2px;
+  }
+  .library .items span:hover {
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .library .user .items {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .library .user .items span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .library .user .items span::before {
+    content: "";
+    width: 8px; height: 8px;
+    border: 1px solid var(--port-fun);
+    background: transparent;
+    flex-shrink: 0;
+  }
+
+  /* -------- canvas -------- */
+  .canvas-wrap {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle, var(--rule-2) 0.6px, transparent 0.7px) 0 0 / 24px 24px,
+      var(--paper);
+  }
+
+  .canvas-hdr {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .canvas-hdr .tab {
+    background: var(--paper);
+    padding: 2px 8px;
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .canvas-hdr .tab.alt {
+    background: transparent;
+    border: 1px dotted var(--rule-2);
+    color: var(--ink-3);
+    font-weight: 400;
+  }
+
+  /* wire SVG overlay */
+  svg.wires {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  svg.wires path {
+    fill: none;
+    stroke-width: 1.4;
+  }
+
+  /* nodes */
+  .node {
+    position: absolute;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    min-width: 88px;
+    z-index: 2;
+    font-size: 12px;
+  }
+  .node .label {
+    padding: 6px 10px 5px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .node .label .adverb {
+    font-size: 10px;
+    color: var(--ink-2);
+    border: 1px solid var(--rule-2);
+    padding: 0 3px;
+    letter-spacing: 0.08em;
+  }
+  .node .sub {
+    border-top: 1px dotted var(--rule-2);
+    padding: 3px 10px 4px;
+    font-size: 10px;
+    color: var(--ink-2);
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  /* ports */
+  .port {
+    position: absolute;
+    width: 10px; height: 10px;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+  }
+  .port.real   { background: var(--port-real);   border-color: var(--port-real); }
+  .port.signal { background: var(--port-signal); border-color: var(--port-signal); }
+  .port.stream { background: var(--paper);       border-color: var(--port-stream); border-style: dashed; }
+  .port.fun    { background: var(--paper);       border-color: var(--port-fun); border-width: 1.5px; }
+  .port.form   { background: var(--port-form);   border-color: var(--port-form); }
+  .port.top    { top: -5px; }
+  .port.bot    { bottom: -5px; }
+  .port .tag {
+    position: absolute;
+    font-size: 9px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .port.top .tag { bottom: 12px; left: 50%; transform: translateX(-50%); }
+  .port.bot .tag { top: 12px; left: 50%; transform: translateX(-50%); }
+
+  /* rank badge — tiny superscript beside a port */
+  .badge {
+    position: absolute;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--warm);
+    letter-spacing: 0;
+    background: var(--paper);
+    padding: 0 2px;
+    line-height: 1;
+    border: 1px solid var(--warm);
+  }
+
+  /* literal / selected accent */
+  .node.lit { border-style: solid; }
+  .node.selected {
+    border-color: var(--warm);
+    box-shadow: 0 0 0 1px var(--warm);
+  }
+  .node.sink {
+    background: var(--surface);
+  }
+
+  /* inline subgraph — function-valued port opened */
+  .node.subgraph {
+    padding: 6px 8px 8px;
+    min-width: 138px;
+  }
+  .node.subgraph .sg-head {
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .node.subgraph .sg-head .sig {
+    color: var(--port-fun);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+  .node.subgraph .sg {
+    border: 1px dotted var(--rule-2);
+    background: rgba(255,255,255,0.3);
+    padding: 8px;
+    position: relative;
+    height: 54px;
+  }
+  .node.subgraph .mini {
+    position: absolute;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    font-size: 10px;
+    padding: 2px 6px;
+    letter-spacing: 0.02em;
+  }
+
+  /* live scope inside sink */
+  .node.sink .scope {
+    border-top: 1px solid var(--ink);
+    height: 32px;
+    background:
+      linear-gradient(var(--rule) 1px, transparent 1px) 0 50%/100% 16px no-repeat,
+      var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+  .node.sink .scope svg {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+  }
+
+  /* annotation callouts */
+  .note {
+    position: absolute;
+    font-size: 10px;
+    color: var(--warm);
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+    z-index: 3;
+    max-width: 150px;
+  }
+  .note::before {
+    content: "";
+    display: inline-block;
+    width: 18px;
+    height: 1px;
+    background: var(--warm);
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  .note.tl::before { display: none; }
+  .note.tl::after {
+    content: "";
+    position: absolute;
+    left: -14px; top: 4px;
+    width: 12px; height: 1px;
+    background: var(--warm);
+  }
+
+  /* -------- inspector -------- */
+  .inspector {
+    border-left: 1px solid var(--rule);
+    padding: 14px 14px 14px;
+    background: var(--paper);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .inspector h3 {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-bottom: 6px;
+    border-bottom: 1px dotted var(--rule-2);
+  }
+  .inspector .selected-node {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--warm);
+    letter-spacing: 0.02em;
+  }
+  .inspector .kv {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    row-gap: 3px;
+    column-gap: 10px;
+    font-size: 11px;
+  }
+  .inspector .kv .k { color: var(--ink-2); }
+  .inspector .kv .v { color: var(--ink); }
+  .inspector .kv .v input {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    width: 100%;
+    padding: 1px 0;
+    outline: none;
+  }
+  .inspector .kv .v input:focus { border-color: var(--warm); }
+  .inspector .help {
+    font-size: 10px;
+    color: var(--ink-2);
+    border-top: 1px dotted var(--rule-2);
+    padding-top: 8px;
+    line-height: 1.5;
+  }
+  .inspector .perf {
+    font-size: 10px;
+    color: var(--ink-2);
+  }
+  .inspector .perf .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+    border-bottom: 1px dotted var(--rule-2);
+  }
+  .inspector .perf .row .val { color: var(--ink); font-weight: 500; }
+
+  /* -------- repl -------- */
+  .repl {
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 14px 0;
+    overflow-y: auto;
+    font-size: 12px;
+    background: var(--paper);
+    position: relative;
+  }
+  .repl::before {
+    content: "REPL";
+    position: absolute;
+    top: 6px;
+    right: 14px;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--ink-3);
+  }
+  .repl .line { white-space: pre; padding: 1px 0; }
+  .repl .line.in { color: var(--ink); }
+  .repl .line.in::before { content: "› "; color: var(--ink-3); }
+  .repl .line.out  { color: var(--ink-2); padding-left: 14px; }
+  .repl .line.ok   { color: var(--cool); padding-left: 14px; }
+  .repl .line.err  { color: var(--warm); padding-left: 14px; }
+  .repl .prompt { color: var(--ink); }
+  .repl .caret {
+    display: inline-block;
+    width: 7px; height: 14px;
+    background: var(--ink);
+    vertical-align: -2px;
+    margin-left: 2px;
+    animation: caret 1.1s steps(2) infinite;
+  }
+  @keyframes caret { 50% { opacity: 0; } }
+
+  /* -------- time-travel -------- */
+  .tt {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 14px;
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+  .tt .ctrls {
+    display: flex;
+    gap: 4px;
+    color: var(--ink);
+  }
+  .tt .ctrls span {
+    padding: 0 4px;
+    font-size: 13px;
+    cursor: default;
+  }
+  .tt .step { letter-spacing: 0.04em; }
+  .tt .step .n { color: var(--ink); font-weight: 500; }
+  .tt .bar {
+    flex: 1;
+    position: relative;
+    height: 6px;
+    background: var(--surface);
+    border: 1px solid var(--rule-2);
+  }
+  .tt .bar .fill {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    bottom: -1px;
+    width: 72%;
+    background: var(--ink);
+  }
+  .tt .bar .head {
+    position: absolute;
+    top: -3px;
+    width: 2px;
+    height: 12px;
+    background: var(--warm);
+    left: 72%;
+  }
+  .tt .scrub { letter-spacing: 0.04em; color: var(--warm); }
+
+  /* -------- tiny legend in canvas -------- */
+  .legend {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    display: flex;
+    gap: 14px;
+    font-size: 10px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+    background: var(--paper);
+    padding: 3px 8px;
+    border: 1px solid var(--rule);
+    z-index: 4;
+  }
+  .legend .sw {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend .sw::before {
+    content: "";
+    width: 10px; height: 10px;
+    border: 1px solid currentColor;
+  }
+  .legend .sw.real::before   { background: var(--port-real);   color: var(--port-real); }
+  .legend .sw.signal::before { background: var(--port-signal); color: var(--port-signal); }
+  .legend .sw.stream::before { color: var(--port-stream); border-style: dashed; }
+  .legend .sw.fun::before    { color: var(--port-fun); border-width: 1.5px; }
+  .legend .sw.form::before   { background: var(--port-form); color: var(--port-form); }
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <!-- ========================= TOP BAR ========================= -->
+  <header>
+    <span class="brand">STAX</span>
+    <nav>
+      <a>file</a><a>edit</a><a>view</a><a>run</a><a>help</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="stat"><span class="dot"></span>audio · 96 kHz · 128</span>
+    <span class="stat">cpu 4.2%</span>
+    <span class="transport">
+      <span>▶ play</span>
+      <span class="stop">■ stop</span>
+    </span>
+  </header>
+
+  <!-- ========================= MAIN ROW ========================= -->
+  <div class="main">
+
+    <!-- -------- library -------- -->
+    <aside class="library">
+      <h3>library</h3>
+
+      <div class="group">
+        <div class="group-head"><span class="chev">▾</span> math</div>
+        <div class="items">
+          <span>+</span><span>−</span><span>×</span>
+          <span>÷</span><span>%</span><span>mod</span>
+          <span>pow</span><span>sqrt</span><span>abs</span>
+          <span>to</span><span>ord</span><span>nat</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-head"><span class="chev">▾</span> streams</div>
+        <div class="items">
+          <span>take</span><span>drop</span><span>cycle</span>
+          <span>zip</span><span>map</span><span>fold</span>
+          <span>scan</span><span>head</span><span>tail</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-head"><span class="chev">▾</span> signals</div>
+        <div class="items">
+          <span>sinosc</span><span>saw</span><span>lfsaw</span>
+          <span>pulse</span><span>noise</span><span>pink</span>
+          <span>combn</span><span>pluck</span><span>lpf</span>
+          <span>hpf</span><span>env</span><span>ar</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-head"><span class="chev">▾</span> i/o</div>
+        <div class="items">
+          <span>play</span><span>rec</span><span>plot</span>
+          <span>midi.in</span><span>midi.out</span><span>osc</span>
+        </div>
+      </div>
+
+      <div class="group user">
+        <div class="group-head"><span class="chev">▾</span> user</div>
+        <div class="items">
+          <span>my-fm</span>
+          <span>my-reverb</span>
+          <span>tilt-eq</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- -------- canvas -------- -->
+    <div class="canvas-wrap">
+
+      <div class="canvas-hdr">
+        <span>
+          <span class="tab">graph</span>
+          <span class="tab alt">arrangement</span>
+          <span class="tab alt">mixer</span>
+        </span>
+        <span>patch.stax · modified</span>
+      </div>
+
+      <!-- wires (SVG) -->
+      <svg class="wires" viewBox="0 0 1000 640" preserveAspectRatio="none">
+        <!-- 440 → sinosc freq -->
+        <path d="M 165 148  C 165 175, 260 175, 260 200" stroke="var(--port-real)"/>
+        <!-- 0  → sinosc phase -->
+        <path d="M 165 218  C 165 210, 240 210, 240 200" stroke="var(--port-real)"/>
+        <!-- [440 442] → sinosc freq (alt path, shown as stream, dashed) -->
+        <!-- sinosc out → * in -->
+        <path d="M 250 264  C 250 300, 380 300, 380 330" stroke="var(--port-signal)"/>
+        <!-- .3 → * in -->
+        <path d="M 165 346  C 200 346, 330 346, 360 352" stroke="var(--port-real)"/>
+        <!-- * out → + in left -->
+        <path d="M 380 394  C 380 440, 480 440, 480 470" stroke="var(--port-signal)"/>
+        <!-- map out → + in right -->
+        <path d="M 620 430  C 620 450, 540 450, 540 470" stroke="var(--port-signal)"/>
+        <!-- + out → play in -->
+        <path d="M 510 532  C 510 575, 640 575, 640 600" stroke="var(--port-signal)"/>
+        <!-- stream → map (dashed stream wire) -->
+        <path d="M 680 148  C 680 300, 660 300, 660 368" stroke="var(--port-stream)" stroke-dasharray="4 3"/>
+        <!-- fun → map (violet, thicker) -->
+        <path d="M 820 330 C 780 330, 720 330, 700 368" stroke="var(--port-fun)" stroke-width="2"/>
+      </svg>
+
+      <!-- ============ NODES ============ -->
+
+      <!-- literal 440 -->
+      <div class="node lit" style="left: 120px; top: 112px;">
+        <div class="label">440</div>
+        <div class="port bot real" style="right: 14px;">
+          <span class="tag">real</span>
+        </div>
+      </div>
+
+      <!-- literal 0 (phase) -->
+      <div class="node lit" style="left: 120px; top: 184px;">
+        <div class="label">0</div>
+        <div class="port bot real" style="right: 14px;">
+          <span class="tag">real</span>
+        </div>
+      </div>
+
+      <!-- sinosc (highlighted = selected) -->
+      <div class="node selected" style="left: 210px; top: 200px;">
+        <div class="label">sinosc</div>
+        <div class="sub">
+          <span>freq</span><span>phase</span>
+        </div>
+        <div class="port top real" style="left: 14px;"></div>
+        <div class="port top real" style="right: 14px;"></div>
+        <div class="port bot signal" style="left: 50%; margin-left: -5px;">
+          <span class="tag">signal</span>
+        </div>
+      </div>
+
+      <!-- .3 -->
+      <div class="node lit" style="left: 120px; top: 314px;">
+        <div class="label">.3</div>
+        <div class="port bot real" style="right: 14px;"></div>
+      </div>
+
+      <!-- * with adverb toggle -->
+      <div class="node" style="left: 330px; top: 330px;">
+        <div class="label">
+          <span>×</span>
+          <span class="adverb" title="adverb: apply / reduce / scan / pairwise">apply ▾</span>
+        </div>
+        <div class="port top signal" style="left: 14px;"></div>
+        <div class="port top real" style="right: 14px;"></div>
+        <div class="port bot signal" style="left: 50%; margin-left: -5px;"></div>
+      </div>
+
+      <!-- [440 442]  (stream literal up top) -->
+      <div class="node lit" style="left: 630px; top: 108px; min-width: 108px;">
+        <div class="label">[ 440  442 ]</div>
+        <div class="port bot stream" style="right: 14px;">
+          <span class="tag" style="color: var(--port-stream)">stream</span>
+        </div>
+      </div>
+
+      <!-- map (higher-order with function-valued port) -->
+      <div class="node subgraph" style="left: 602px; top: 368px; min-width: 148px;">
+        <div class="sg-head">
+          <span>map</span>
+          <span class="sig">\x → y</span>
+        </div>
+        <div class="sg">
+          <!-- inline subgraph -->
+          <div class="mini" style="left: 6px; top: 8px;">x</div>
+          <div class="mini" style="left: 56px; top: 8px;">× .5</div>
+          <div class="mini" style="left: 110px; top: 28px;">y</div>
+          <!-- tiny wires -->
+          <svg style="position:absolute; inset:0; width:100%; height:100%;" viewBox="0 0 132 54" preserveAspectRatio="none">
+            <path d="M 22 16 L 56 16" stroke="var(--ink-2)" stroke-width="1" fill="none"/>
+            <path d="M 84 16 C 100 16, 100 36, 110 36" stroke="var(--ink-2)" stroke-width="1" fill="none"/>
+          </svg>
+        </div>
+        <!-- ports -->
+        <div class="port top stream" style="left: 14px;"></div>
+        <div class="port top fun"    style="right: 14px;"></div>
+        <div class="port bot signal" style="left: 50%; margin-left: -5px;"></div>
+      </div>
+
+      <!-- fun block in library position (named function) -->
+      <div class="node" style="left: 800px; top: 296px; min-width: 108px; border-color: var(--port-fun);">
+        <div class="label" style="color: var(--port-fun);">
+          <span>my-fm</span>
+          <span class="adverb" style="color: var(--port-fun); border-color: var(--port-fun);">fun</span>
+        </div>
+        <div class="sub"><span>named</span><span>\x → y</span></div>
+        <div class="port bot fun" style="left: 50%; margin-left: -5px;"></div>
+      </div>
+
+      <!-- + (binary math with reduce adverb showing the style) -->
+      <div class="node" style="left: 450px; top: 470px;">
+        <div class="label">
+          <span>+</span>
+          <span class="adverb" style="color: var(--warm); border-color: var(--warm);">reduce /</span>
+        </div>
+        <div class="port top signal" style="left: 14px;"></div>
+        <div class="port top signal" style="right: 14px;">
+          <!-- rank badge on this input -->
+          <span class="badge" style="top: -10px; right: -8px;">@</span>
+        </div>
+        <div class="port bot signal" style="left: 50%; margin-left: -5px;"></div>
+      </div>
+
+      <!-- play sink with live scope -->
+      <div class="node sink" style="left: 580px; top: 580px; min-width: 132px;">
+        <div class="label">
+          <span>▶ play</span>
+          <span class="adverb" style="color: var(--warm); border-color: var(--warm);">live</span>
+        </div>
+        <div class="scope">
+          <svg viewBox="0 0 120 32" preserveAspectRatio="none">
+            <path d="M 0 16 Q 5 2 10 16 T 20 16 T 30 16 T 40 16 T 50 16 T 60 16 T 70 16 T 80 16 T 90 16 T 100 16 T 120 16"
+                  stroke="var(--warm)" stroke-width="1.2" fill="none"/>
+          </svg>
+        </div>
+        <div class="port top signal" style="left: 50%; margin-left: -5px;"></div>
+      </div>
+
+      <!-- callouts -->
+      <div class="note" style="left: 536px; top: 474px;">adverb toggle ⇒ reduce / scan / pairwise</div>
+      <div class="note" style="left: 612px; top: 452px;">rank badge @ on one input</div>
+      <div class="note" style="left: 760px; top: 380px;">fn-port: drill-in subgraph<br>or drop named block</div>
+      <div class="note" style="left: 722px; top: 605px;">inline scope on every sink</div>
+
+      <!-- legend -->
+      <div class="legend">
+        <span class="sw real">real</span>
+        <span class="sw signal">signal</span>
+        <span class="sw stream">stream</span>
+        <span class="sw fun">fun</span>
+        <span class="sw form">form</span>
+      </div>
+    </div>
+
+    <!-- -------- inspector -------- -->
+    <aside class="inspector">
+      <h3>inspector</h3>
+      <div class="selected-node">sinosc</div>
+
+      <div class="kv">
+        <span class="k">freq</span><span class="v"><input value="440" /></span>
+        <span class="k">phase</span><span class="v"><input value="0" /></span>
+        <span class="k">out</span><span class="v">signal · 1ch</span>
+        <span class="k">id</span><span class="v" style="color:var(--ink-3)">#n_0042</span>
+      </div>
+
+      <div class="help">
+        <strong>sinosc</strong> &nbsp;·&nbsp; <em>freq phase → signal</em><br>
+        Sine oscillator. Multi-channel expansion if <code>freq</code> is a list.
+      </div>
+
+      <h3>perf</h3>
+      <div class="perf">
+        <div class="row"><span>block size</span><span class="val">128</span></div>
+        <div class="row"><span>this node</span><span class="val">0.08%</span></div>
+        <div class="row"><span>subgraph</span><span class="val">0.31%</span></div>
+        <div class="row"><span>backend</span><span class="val">cpu simd</span></div>
+      </div>
+
+      <h3>stack</h3>
+      <div class="perf">
+        <div class="row"><span>depth</span><span class="val">3</span></div>
+        <div class="row"><span>top</span><span class="val" style="color:var(--port-signal)">signal</span></div>
+        <div class="row"><span>–1</span><span class="val">real 0.3</span></div>
+        <div class="row"><span>–2</span><span class="val" style="color:var(--port-stream)">stream</span></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ========================= REPL ========================= -->
+  <section class="repl">
+    <div class="line in">[440 442] 0 sinosc .3 * [6 7] 0 lfsaw .04 * 5/3 + + play</div>
+    <div class="line ok">✓ voice #1 · stereo · running</div>
+    <div class="line in">.s</div>
+    <div class="line out">stack : []</div>
+    <div class="line in">[1 2] @ [10 20] +</div>
+    <div class="line out">⇒ [[11 21] [12 22]]</div>
+    <div class="line in"><span class="prompt">[1 2 3 4] +/</span><span class="caret"></span></div>
+  </section>
+
+  <!-- ========================= TIME-TRAVEL ========================= -->
+  <div class="tt">
+    <span class="ctrls">
+      <span>◀◀</span><span>◀</span><span>❚❚</span><span>▶</span><span>▶▶</span>
+    </span>
+    <span class="step">step <span class="n">12,047</span> / 16,732</span>
+    <div class="bar">
+      <div class="fill"></div>
+      <div class="head"></div>
+    </div>
+    <span class="scrub">scrub : −4,685 ops</span>
+  </div>
+
+</div>
+</body>
+</html>

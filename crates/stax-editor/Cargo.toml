@@ -1,0 +1,12 @@
+[package]
+name    = "stax-editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# M5: egui node editor, text view, fn-port detail, REPL pane, time-travel.
+# egui and stax-graph added at M5; this crate is scaffold-only for M0.
+
+[dependencies]
+stax-core  = { workspace = true }
+stax-eval  = { workspace = true }

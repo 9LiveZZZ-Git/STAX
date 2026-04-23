@@ -1,0 +1,12 @@
+[package]
+name    = "stax-arrange"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# M7: Transport, tracks, clips, automation lanes, session/arrangement/mixer views.
+# stax-io and scheduler added at M7; this crate is scaffold-only for M0.
+
+[dependencies]
+stax-core = { workspace = true }
+stax-eval = { workspace = true }

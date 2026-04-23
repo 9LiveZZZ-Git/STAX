@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>stax — mixer view</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:   #f4f1ea;
+    --paper-2: #efebe1;
+    --surface: #ebe7dd;
+    --surface-2: #e0dbcc;
+    --rule:    #d4cfc3;
+    --rule-2:  #bcb5a4;
+    --ink:     #1a1a1a;
+    --ink-2:   #6b6558;
+    --ink-3:   #9a9383;
+
+    --port-real:   #1a1a1a;
+    --port-signal: #c94820;
+    --port-stream: #2d5a4a;
+    --port-fun:    #6b4e8a;
+    --port-form:   #8a6b2a;
+
+    --warm:    #c94820;
+    --cool:    #2d5a4a;
+    --queued:  #d4a017;
+
+    --t-kick: #8a4a4a;
+    --t-bass: #2d5a4a;
+    --t-pad:  #6b4e8a;
+    --t-lead: #c94820;
+    --t-fx:   #8a6b2a;
+    --t-rev:  #4a6b8a;
+    --t-del:  #4a6b8a;
+
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--ink);
+    background: var(--paper);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: grid;
+    grid-template-rows: 40px 28px 1fr 38px;
+    height: 100vh;
+    width: 100vw;
+    max-width: 1600px;
+    margin: 0 auto;
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+  }
+
+  /* ===== top bar ===== */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  header .brand {
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    padding-right: 14px;
+    border-right: 1px solid var(--rule);
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+  header nav { display: flex; gap: 14px; color: var(--ink-2); }
+  header .spacer { flex: 1; }
+  header .stat {
+    font-size: 11px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+  }
+  header .stat .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--warm);
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  header .xport {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding-left: 14px;
+    border-left: 1px solid var(--rule);
+    height: 100%;
+  }
+  header .xport .pos {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  header .xport .pos .b { color: var(--ink-2); }
+  header .xport .pos .sub { color: var(--ink-3); font-size: 10px; margin-left: 4px; }
+  header .xport .bpm {
+    border: 1px solid var(--rule);
+    padding: 3px 8px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  header .xport .bpm .b { color: var(--ink-3); font-weight: 400; margin-left: 4px; font-size: 9px; letter-spacing: 0.10em; }
+  header .xport .ts { color: var(--ink-2); font-size: 11px; }
+  header .xport .link {
+    font-size: 10px;
+    color: var(--cool);
+    border: 1px solid var(--cool);
+    padding: 1px 5px;
+    letter-spacing: 0.10em;
+  }
+  header .xport .play.active { color: var(--warm); }
+  header .xport .play { color: var(--ink-3); }
+
+  /* ===== tabs ===== */
+  .tabs {
+    display: flex;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    align-items: center;
+  }
+  .tabs .tab {
+    padding: 4px 14px;
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-right: 1px dotted var(--rule-2);
+    cursor: default;
+  }
+  .tabs .tab.active {
+    color: var(--ink);
+    background: var(--paper);
+    font-weight: 500;
+    border-bottom: 1.5px solid var(--warm);
+    margin-bottom: -1px;
+    padding-bottom: 5px;
+  }
+  .tabs .spacer { flex: 1; }
+  .tabs .meta {
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+  }
+  .tabs .meta .name { color: var(--ink); font-weight: 500; }
+
+  /* ===== main: channel strips + inspector ===== */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 240px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .strips {
+    display: flex;
+    overflow-x: auto;
+    background: var(--paper);
+    padding: 0;
+  }
+
+  /* ============ CHANNEL STRIP ============ */
+  .strip {
+    width: 124px;
+    flex-shrink: 0;
+    border-right: 1px dotted var(--rule-2);
+    display: flex;
+    flex-direction: column;
+    background: var(--paper);
+  }
+  .strip.return { background: var(--paper-2); }
+  .strip.master {
+    width: 168px;
+    border-left: 2px solid var(--ink);
+    background: var(--surface);
+    border-right: none;
+  }
+  .strip.divider {
+    width: 1px;
+    border-right: 1px solid var(--rule);
+    background: var(--paper);
+  }
+
+  /* strip header */
+  .s-head {
+    border-bottom: 1px dotted var(--rule-2);
+    padding: 6px 10px;
+    background: var(--paper);
+  }
+  .strip.return .s-head { background: var(--paper-2); }
+  .strip.master .s-head {
+    background: var(--surface);
+    border-bottom: 1.5px solid var(--ink);
+    padding: 8px 12px;
+  }
+  .s-head .row1 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .s-head .swatch {
+    width: 4px; height: 16px;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+  .s-head .nm {
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+  .s-head .num {
+    font-size: 10px;
+    color: var(--ink-3);
+  }
+  .s-head .out {
+    font-size: 10px;
+    color: var(--ink-2);
+    margin-top: 3px;
+    letter-spacing: 0.04em;
+  }
+  .s-head .out::before { content: "→ "; color: var(--ink-3); }
+  .strip.master .s-head .nm {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    font-size: 11px;
+  }
+
+  /* section labels */
+  .s-section {
+    padding: 6px 10px 4px;
+    font-size: 9px;
+    color: var(--ink-3);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+    border-top: 1px dotted var(--rule-2);
+  }
+  .s-section .count {
+    color: var(--ink-3);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  /* insert slots */
+  .ins {
+    padding: 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .ins .slot {
+    border: 1px solid currentColor;
+    padding: 3px 6px;
+    font-size: 10px;
+    color: var(--ink);
+    background: var(--paper);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    overflow: hidden;
+  }
+  .ins .slot .dot {
+    width: 5px; height: 5px;
+    background: var(--cool);
+    flex-shrink: 0;
+  }
+  .ins .slot .lbl {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ins .slot.bypass {
+    border-style: dashed;
+    color: var(--ink-3) !important;
+    opacity: 0.65;
+  }
+  .ins .slot.bypass .dot { background: var(--ink-3); }
+  .ins .slot.bypass .lbl { text-decoration: line-through; }
+  .ins .slot.selected {
+    border-color: var(--warm);
+    border-width: 1.5px;
+    color: var(--warm);
+  }
+  .ins .slot.selected .dot { background: var(--warm); }
+  .ins .empty {
+    border: 1px dotted var(--rule-2);
+    padding: 3px 6px;
+    font-size: 10px;
+    color: var(--ink-3);
+    text-align: center;
+    height: 22px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+  .ins .empty:hover {
+    border-color: var(--ink-3);
+    color: var(--ink-2);
+  }
+
+  /* sends */
+  .sends {
+    padding: 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sends .send {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    padding: 1px 0;
+    border-bottom: 1px dotted var(--rule-2);
+  }
+  .sends .send .to {
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+  }
+  .sends .send .lvl {
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .sends .send.off .lvl { color: var(--ink-3); font-weight: 400; }
+  .sends .send.hot .lvl { color: var(--warm); }
+
+  /* pan + fader area */
+  .control {
+    flex: 1;
+    padding: 8px 10px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top: 1px dotted var(--rule-2);
+  }
+  .pan {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--ink-2);
+    justify-content: space-between;
+  }
+  .pan .knob {
+    width: 22px; height: 22px;
+    border: 1px solid var(--ink);
+    border-radius: 50%;
+    position: relative;
+    background: var(--paper);
+  }
+  .pan .knob::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    width: 1.5px;
+    height: 8px;
+    background: var(--ink);
+    transform-origin: 50% 9px;
+    margin-left: -0.75px;
+  }
+  .pan .knob.l::after  { transform: rotate(-30deg); }
+  .pan .knob.r::after  { transform: rotate( 30deg); }
+  .pan .knob.c::after  { transform: rotate(  0deg); }
+  .pan .knob.ll::after { transform: rotate(-50deg); }
+  .pan .val { color: var(--ink); font-weight: 500; }
+
+  .fader-row {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    align-items: stretch;
+    min-height: 140px;
+  }
+  .fader {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--rule-2);
+    position: relative;
+  }
+  .fader .scale {
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(to bottom,
+        transparent 0,
+        transparent 9px,
+        var(--rule-2) 9px,
+        var(--rule-2) 10px);
+  }
+  .fader .handle {
+    position: absolute;
+    left: -3px; right: -3px;
+    height: 12px;
+    background: var(--ink);
+    cursor: ns-resize;
+  }
+  .fader .handle::after {
+    content: "";
+    position: absolute;
+    top: 50%; left: 0; right: 0;
+    height: 1px;
+    background: var(--paper);
+  }
+  .strip.master .fader .handle {
+    background: var(--warm);
+    height: 14px;
+  }
+  /* meter */
+  .meter {
+    width: 14px;
+    background: var(--surface);
+    border: 1px solid var(--rule-2);
+    position: relative;
+    overflow: hidden;
+  }
+  .meter .L, .meter .R {
+    position: absolute;
+    bottom: 0;
+    width: 5px;
+    background: var(--cool);
+  }
+  .meter .L { left: 1px; }
+  .meter .R { right: 1px; }
+  .meter .peak {
+    position: absolute;
+    width: 100%;
+    height: 1.5px;
+    background: var(--warm);
+  }
+  .meter::after {
+    content: "";
+    position: absolute;
+    top: 12%;
+    left: 0; right: 0;
+    height: 1px;
+    background: var(--ink-3);
+    opacity: 0.4;
+  }
+  .strip.master .meter { width: 18px; }
+
+  /* mute / solo / rec */
+  .msr {
+    display: flex;
+    gap: 3px;
+    padding: 4px 10px 4px;
+    border-top: 1px dotted var(--rule-2);
+  }
+  .msr span {
+    flex: 1;
+    text-align: center;
+    font-size: 10px;
+    border: 1px solid var(--rule-2);
+    color: var(--ink-3);
+    padding: 1px 0;
+    letter-spacing: 0.10em;
+    cursor: pointer;
+  }
+  .msr span:hover { color: var(--ink); border-color: var(--ink); }
+  .msr span.on {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+  .msr span.solo.on {
+    background: var(--warm);
+    border-color: var(--warm);
+  }
+  .msr span.rec.on {
+    background: var(--warm);
+    border-color: var(--warm);
+  }
+
+  /* readout */
+  .readout {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 10px 8px;
+    font-size: 10px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+  }
+  .readout .db { color: var(--ink); font-weight: 500; }
+  .readout .pk {
+    color: var(--warm);
+  }
+
+  /* ===== inspector ===== */
+  .inspector {
+    border-left: 1px solid var(--rule);
+    background: var(--paper);
+    padding: 14px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .inspector h3 {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px dotted var(--rule-2);
+    padding-bottom: 5px;
+  }
+  .inspector .selected-name {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .inspector .selected-name .tag {
+    font-size: 9px;
+    background: var(--warm);
+    color: var(--paper);
+    padding: 1px 5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+  }
+  .inspector .selected-name .nm {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--warm);
+  }
+  .inspector .breadcrumb {
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+  }
+  .inspector .breadcrumb span { color: var(--ink-2); }
+  .inspector .kv {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    row-gap: 4px;
+    column-gap: 10px;
+    font-size: 11px;
+  }
+  .inspector .kv .k { color: var(--ink-2); }
+  .inspector .kv .v { color: var(--ink); }
+  .inspector .kv .v.warm { color: var(--warm); }
+  .inspector .kv .v.fun  { color: var(--port-fun); }
+  .inspector .kv .v input {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    width: 100%;
+    padding: 1px 0;
+    outline: none;
+  }
+  .inspector .kv .v input:focus { border-color: var(--warm); }
+  .inspector .expr-box {
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--ink);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .inspector .expr-box .br  { color: var(--ink-2); }
+  .inspector .expr-box .num { color: var(--ink); }
+  .inspector .expr-box .op  { color: var(--port-signal); }
+  .inspector .expr-box .word{ color: var(--ink); }
+  .inspector .expr-box .kw  { color: var(--port-fun); font-weight: 500; }
+  .inspector .open-graph {
+    font-size: 10px;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    padding: 4px 8px;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+  }
+  .inspector .open-graph:hover {
+    border-color: var(--warm);
+    color: var(--warm);
+  }
+  .inspector .small {
+    font-size: 10px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+
+  /* ===== bottom bar ===== */
+  .botbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 14px;
+    border-top: 1px solid var(--rule);
+    background: var(--paper);
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+  .botbar .meter-h { display: flex; gap: 4px; align-items: center; }
+  .botbar .meter-h .bar {
+    width: 80px; height: 6px;
+    background: var(--surface);
+    border: 1px solid var(--rule-2);
+    position: relative;
+  }
+  .botbar .meter-h .bar .fill {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    background: var(--cool);
+  }
+  .botbar .meter-h .bar .peak {
+    position: absolute; top: 0; bottom: 0;
+    width: 1px; background: var(--warm);
+  }
+  .botbar .out {
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 2px 8px;
+  }
+  .botbar .out .k { color: var(--ink-3); margin-right: 4px; }
+  .botbar .spacer { flex: 1; }
+  .botbar .pre-post {
+    display: flex;
+    border: 1px solid var(--rule);
+  }
+  .botbar .pre-post span {
+    padding: 2px 8px;
+    cursor: pointer;
+    color: var(--ink-3);
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    font-size: 10px;
+  }
+  .botbar .pre-post span.on {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <header>
+    <span class="brand">STAX</span>
+    <nav>
+      <a>file</a><a>edit</a><a>view</a><a>run</a><a>help</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="stat"><span class="dot"></span>audio · 96 kHz · 128</span>
+    <span class="xport">
+      <span class="play active">▶</span>
+      <span class="play">■</span>
+      <span class="pos">5<span class="b">.</span>2<span class="b">.</span>3<span class="sub">/16</span></span>
+      <span class="bpm">124.0<span class="b">BPM</span></span>
+      <span class="ts">4/4</span>
+      <span class="link">LINK · 3</span>
+    </span>
+  </header>
+
+  <!-- ===================== TABS ===================== -->
+  <div class="tabs">
+    <span class="tab">graph</span>
+    <span class="tab">arrangement</span>
+    <span class="tab">session</span>
+    <span class="tab active">mixer</span>
+    <span class="spacer"></span>
+    <span class="meta">set: <span class="name">night_drive.stax</span> · 8 channels</span>
+  </div>
+
+  <!-- ===================== MAIN ===================== -->
+  <div class="main">
+
+    <!-- ===== channel strips ===== -->
+    <div class="strips">
+
+      <!-- ============ KICK ============ -->
+      <div class="strip" style="color: var(--t-kick);">
+        <div class="s-head">
+          <div class="row1"><div class="swatch"></div><span class="num">01</span><span class="nm">kick</span></div>
+          <div class="out">master</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·2</span></div>
+        <div class="ins">
+          <div class="slot"><span class="dot"></span><span class="lbl">tilt-eq</span></div>
+          <div class="slot"><span class="dot"></span><span class="lbl">saturate .3</span></div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">sends</div>
+        <div class="sends">
+          <div class="send"><span class="to">rev</span><span class="lvl">−18</span></div>
+          <div class="send off"><span class="to">del</span><span class="lvl">−∞</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>pan</span><span class="knob c"></span><span class="val">C</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 30%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 62%;"></div>
+              <div class="R" style="height: 60%;"></div>
+              <div class="peak" style="bottom: 71%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr">
+          <span class="m">M</span><span class="solo">S</span><span class="rec">R</span>
+        </div>
+        <div class="readout"><span class="db">0.0</span><span class="pk">−2.1</span></div>
+      </div>
+
+      <!-- ============ BASS ============ -->
+      <div class="strip" style="color: var(--t-bass);">
+        <div class="s-head">
+          <div class="row1"><div class="swatch"></div><span class="num">02</span><span class="nm">bass</span></div>
+          <div class="out">master</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·3</span></div>
+        <div class="ins">
+          <div class="slot"><span class="dot"></span><span class="lbl">,cutoff lpf</span></div>
+          <div class="slot bypass"><span class="dot"></span><span class="lbl">drive .4</span></div>
+          <div class="slot"><span class="dot"></span><span class="lbl">comp 4:1</span></div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">sends</div>
+        <div class="sends">
+          <div class="send"><span class="to">rev</span><span class="lvl">−12</span></div>
+          <div class="send off"><span class="to">del</span><span class="lvl">−∞</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>pan</span><span class="knob l"></span><span class="val">L8</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 38%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 55%;"></div>
+              <div class="R" style="height: 55%;"></div>
+              <div class="peak" style="bottom: 60%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr"><span class="m">M</span><span class="solo">S</span><span class="rec">R</span></div>
+        <div class="readout"><span class="db">−3.0</span><span class="pk">−4.4</span></div>
+      </div>
+
+      <!-- ============ PAD ============ -->
+      <div class="strip" style="color: var(--t-pad);">
+        <div class="s-head">
+          <div class="row1"><div class="swatch"></div><span class="num">03</span><span class="nm">pad</span></div>
+          <div class="out">master</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·2</span></div>
+        <div class="ins">
+          <div class="slot selected"><span class="dot"></span><span class="lbl">chorus 4v</span></div>
+          <div class="slot"><span class="dot"></span><span class="lbl">tilt-eq</span></div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">sends</div>
+        <div class="sends">
+          <div class="send hot"><span class="to">rev</span><span class="lvl">−6</span></div>
+          <div class="send"><span class="to">del</span><span class="lvl">−18</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>pan</span><span class="knob r"></span><span class="val">R5</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 42%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 48%;"></div>
+              <div class="R" style="height: 52%;"></div>
+              <div class="peak" style="bottom: 56%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr"><span class="m">M</span><span class="solo">S</span><span class="rec">R</span></div>
+        <div class="readout"><span class="db">−4.2</span><span class="pk">−5.3</span></div>
+      </div>
+
+      <!-- ============ LEAD ============ -->
+      <div class="strip" style="color: var(--t-lead);">
+        <div class="s-head">
+          <div class="row1"><div class="swatch"></div><span class="num">04</span><span class="nm">lead</span></div>
+          <div class="out">master</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·1</span></div>
+        <div class="ins">
+          <div class="slot"><span class="dot"></span><span class="lbl">phaser .8</span></div>
+          <div class="empty">+ insert</div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">sends</div>
+        <div class="sends">
+          <div class="send"><span class="to">rev</span><span class="lvl">−14</span></div>
+          <div class="send hot"><span class="to">del</span><span class="lvl">−4</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>pan</span><span class="knob c"></span><span class="val">C</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 35%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 70%;"></div>
+              <div class="R" style="height: 68%;"></div>
+              <div class="peak" style="bottom: 78%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr"><span class="m">M</span><span class="solo on">S</span><span class="rec">R</span></div>
+        <div class="readout"><span class="db">−1.5</span><span class="pk">−0.4</span></div>
+      </div>
+
+      <!-- ============ NOISE-FX ============ -->
+      <div class="strip" style="color: var(--t-fx);">
+        <div class="s-head">
+          <div class="row1"><div class="swatch"></div><span class="num">05</span><span class="nm">noise-fx</span></div>
+          <div class="out">master</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·2</span></div>
+        <div class="ins">
+          <div class="slot"><span class="dot"></span><span class="lbl">1k 4k bpf</span></div>
+          <div class="slot"><span class="dot"></span><span class="lbl">env adsr</span></div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">sends</div>
+        <div class="sends">
+          <div class="send hot"><span class="to">rev</span><span class="lvl">0</span></div>
+          <div class="send off"><span class="to">del</span><span class="lvl">−∞</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>pan</span><span class="knob ll"></span><span class="val">L24</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 60%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 32%;"></div>
+              <div class="R" style="height: 28%;"></div>
+              <div class="peak" style="bottom: 38%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr"><span class="m">M</span><span class="solo">S</span><span class="rec">R</span></div>
+        <div class="readout"><span class="db">−12.0</span><span class="pk">−14.6</span></div>
+      </div>
+
+      <!-- divider before returns -->
+      <div class="strip divider"></div>
+
+      <!-- ============ REV (return) ============ -->
+      <div class="strip return" style="color: var(--t-rev);">
+        <div class="s-head">
+          <div class="row1"><div class="swatch"></div><span class="num">A</span><span class="nm">rev</span></div>
+          <div class="out">master</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·1</span></div>
+        <div class="ins">
+          <div class="slot"><span class="dot"></span><span class="lbl">freeverb .8</span></div>
+          <div class="empty">+ insert</div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">return</div>
+        <div class="sends">
+          <div class="send"><span class="to">type</span><span class="lvl">stereo</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>pan</span><span class="knob c"></span><span class="val">C</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 40%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 50%;"></div>
+              <div class="R" style="height: 52%;"></div>
+              <div class="peak" style="bottom: 58%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr"><span class="m">M</span><span class="solo">S</span></div>
+        <div class="readout"><span class="db">−2.0</span><span class="pk">−3.1</span></div>
+      </div>
+
+      <!-- ============ DEL (return) ============ -->
+      <div class="strip return" style="color: var(--t-del);">
+        <div class="s-head">
+          <div class="row1"><div class="swatch"></div><span class="num">B</span><span class="nm">del</span></div>
+          <div class="out">master</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·1</span></div>
+        <div class="ins">
+          <div class="slot"><span class="dot"></span><span class="lbl">3/8 combn .6</span></div>
+          <div class="empty">+ insert</div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">return</div>
+        <div class="sends">
+          <div class="send"><span class="to">type</span><span class="lvl">stereo</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>pan</span><span class="knob c"></span><span class="val">C</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 45%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 42%;"></div>
+              <div class="R" style="height: 46%;"></div>
+              <div class="peak" style="bottom: 50%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr"><span class="m">M</span><span class="solo">S</span></div>
+        <div class="readout"><span class="db">−4.5</span><span class="pk">−5.8</span></div>
+      </div>
+
+      <!-- ============ MASTER ============ -->
+      <div class="strip master">
+        <div class="s-head">
+          <div class="row1"><div class="swatch" style="background: var(--ink);"></div><span class="nm">master</span></div>
+          <div class="out">audio out 1-2</div>
+        </div>
+        <div class="s-section">inserts <span class="count">·3</span></div>
+        <div class="ins">
+          <div class="slot" style="color: var(--ink);"><span class="dot"></span><span class="lbl">tilt-eq mid</span></div>
+          <div class="slot" style="color: var(--ink);"><span class="dot"></span><span class="lbl">comp 2:1 slow</span></div>
+          <div class="slot" style="color: var(--ink);"><span class="dot"></span><span class="lbl">softclip .85</span></div>
+          <div class="empty">+ insert</div>
+        </div>
+        <div class="s-section">output</div>
+        <div class="sends">
+          <div class="send"><span class="to">device</span><span class="lvl">cpal · default</span></div>
+          <div class="send"><span class="to">latency</span><span class="lvl">2.7 ms</span></div>
+        </div>
+        <div class="control">
+          <div class="pan"><span>balance</span><span class="knob c"></span><span class="val">C</span></div>
+          <div class="fader-row">
+            <div class="fader">
+              <div class="scale"></div>
+              <div class="handle" style="top: 28%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 78%;"></div>
+              <div class="R" style="height: 76%;"></div>
+              <div class="peak" style="bottom: 86%;"></div>
+            </div>
+            <div class="meter">
+              <div class="L" style="height: 78%;"></div>
+              <div class="R" style="height: 76%;"></div>
+              <div class="peak" style="bottom: 86%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="msr"><span class="m">M</span><span class="solo">S</span></div>
+        <div class="readout"><span class="db">−6.0</span><span class="pk">−4.2</span></div>
+      </div>
+
+    </div>
+
+    <!-- ===== inspector ===== -->
+    <aside class="inspector">
+      <h3>insert</h3>
+      <div class="selected-name">
+        <span class="tag">insert</span>
+        <span class="nm">chorus 4v</span>
+      </div>
+      <div class="breadcrumb">pad &gt; <span>inserts</span> &gt; slot 1 / 2</div>
+
+      <div class="kv">
+        <span class="k">type</span><span class="v">stax word</span>
+        <span class="k">arity</span><span class="v">signal → signal</span>
+        <span class="k">bypass</span><span class="v">off</span>
+        <span class="k">cpu</span><span class="v">0.41 %</span>
+        <span class="k">latency</span><span class="v">0 samples</span>
+        <span class="k">backend</span><span class="v fun">cpu simd</span>
+      </div>
+
+      <h3>parameters</h3>
+      <div class="kv">
+        <span class="k">voices</span><span class="v"><input value="4" /></span>
+        <span class="k">rate</span><span class="v"><input value="0.7 hz" /></span>
+        <span class="k">depth</span><span class="v"><input value="0.35" /></span>
+        <span class="k">spread</span><span class="v"><input value="0.6" /></span>
+        <span class="k">mix</span><span class="v"><input value="0.5" /></span>
+      </div>
+
+      <h3>expression</h3>
+      <div class="expr-box"><span class="kw">chorus</span> <span class="num">4</span>
+  <span class="num">.7</span> <span class="word">hz</span>  <span class="num">.35</span>
+  <span class="num">.6</span> <span class="word">spread</span></div>
+      <div class="open-graph">⤢  open in graph editor</div>
+
+      <div class="small">
+        Inserts run in chain order top→bottom. Drag to reorder.
+        <span style="color: var(--port-fun); font-weight: 500;">cmd-click</span>
+        an empty slot to paste a stax expression directly without
+        opening the graph.
+      </div>
+    </aside>
+  </div>
+
+  <!-- ===================== BOTTOM BAR ===================== -->
+  <div class="botbar">
+    <span class="meter-h">
+      <span style="color: var(--ink-2); letter-spacing: 0.04em;">L</span>
+      <span class="bar"><span class="fill" style="width: 78%;"></span><span class="peak" style="left: 86%;"></span></span>
+      <span style="color: var(--ink-2); letter-spacing: 0.04em;">R</span>
+      <span class="bar"><span class="fill" style="width: 76%;"></span><span class="peak" style="left: 86%;"></span></span>
+    </span>
+    <span class="out"><span class="k">master</span>−4.2 dB peak</span>
+    <span class="pre-post">
+      <span>pre</span>
+      <span class="on">post</span>
+    </span>
+    <span class="spacer"></span>
+    <span style="font-size: 10px; color: var(--ink-3); letter-spacing: 0.06em;">all slots compile to a single signal graph · 1.2 ms total latency</span>
+  </div>
+
+</div>
+</body>
+</html>

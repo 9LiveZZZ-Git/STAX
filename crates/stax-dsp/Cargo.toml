@@ -1,0 +1,10 @@
+[package]
+name = "stax-dsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stax-core  = { workspace = true }
+realfft    = { workspace = true }
+num-complex = "0.4"
