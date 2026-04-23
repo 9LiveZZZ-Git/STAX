@@ -126,6 +126,16 @@ pub struct StaxApp {
 
     // Animation
     pub anim_t: f32,
+
+    // Autocomplete (REPL + text editor)
+    pub completion_candidates: Vec<String>,
+    pub completion_idx: usize,
+    pub show_completion: bool,
+
+    // Pending navigation (outline/error click → jump to line)
+    pub jump_to_line: Option<usize>,
+    pub pending_scroll_y: Option<f32>,
+    pub last_scroll_y: f32,
 }
 
 // ── Constructor ────────────────────────────────────────────────────────────
@@ -211,6 +221,12 @@ impl StaxApp {
             file_open_buf: String::new(),
             file_open_active: false,
             anim_t: 0.0,
+            completion_candidates: Vec::new(),
+            completion_idx: 0,
+            show_completion: false,
+            jump_to_line: None,
+            pending_scroll_y: None,
+            last_scroll_y: 0.0,
             source,
         };
 
@@ -327,6 +343,12 @@ impl StaxApp {
             file_open_buf: String::new(),
             file_open_active: false,
             anim_t: 0.0,
+            completion_candidates: Vec::new(),
+            completion_idx: 0,
+            show_completion: false,
+            jump_to_line: None,
+            pending_scroll_y: None,
+            last_scroll_y: 0.0,
             source,
         };
         app.recompile();
@@ -1582,6 +1604,7 @@ impl StaxApp {
                         self.selected_node = Some(nid);
                         self.selected_edge = None;
                         self.selected_nodes.clear();
+                        self.fnport.selected_node = None; // sync fnport tab to new selection
                     }
                 } else {
                     // Try to select edge
@@ -1735,7 +1758,8 @@ impl StaxApp {
 
         // ── Context menu: D2 port ops + D3 wire ops + D5 info + A3/A4 ────────
         // Pre-compute hovered input port and hovered edge for context menu use.
-        let ctx_hovered_node  = hovered_node;
+        // Use selected node as fallback so right-click works even after mouse moves off.
+        let ctx_hovered_node  = hovered_node.or(self.selected_node);
         let ctx_hovered_input: Option<(NodeId, u8, stax_graph::PortKind)> =
             hover_pos.and_then(|hp| {
                 self.graph.nodes_in_order().find_map(|n| {

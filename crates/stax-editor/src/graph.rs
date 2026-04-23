@@ -441,7 +441,7 @@ pub fn port_at_screen(
     is_output: bool,
 ) -> Option<u8> {
     let port_count = if is_output { node.outputs.len() } else { node.inputs.len() };
-    let threshold = shell::PORT_HALF * zoom * 2.5;
+    let threshold = shell::PORT_HALF * zoom * 4.0;
     for i in 0..port_count {
         let center = port_screen_pos(node_screen, node, i as u8, is_output);
         if (center - screen_pos).length() < threshold {

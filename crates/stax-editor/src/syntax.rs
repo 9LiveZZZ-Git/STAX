@@ -97,6 +97,11 @@ static BUILTINS: &[&str] = &[
     "upSmp","dwnSmp",
 ];
 
+/// Expose the full builtins list for completion and doc lookup.
+pub fn all_builtins() -> &'static [&'static str] {
+    BUILTINS
+}
+
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
