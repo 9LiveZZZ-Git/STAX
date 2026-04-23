@@ -20,10 +20,28 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libxkbcommon-dev libwayland-dev
+          sudo apt-get install -y \
+            pkg-config \
+            libasound2-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libgl1-mesa-dev \
+            libegl-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libdbus-1-dev
           sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
       - name: cargo check
-        run: cargo check --workspace
+        run: |
+          cargo check --workspace 2>&1 | tee /tmp/check.log; code=${PIPESTATUS[0]}
+          if [ $code -ne 0 ]; then
+            grep -E "^error" /tmp/check.log | head -10 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit $code
+          fi
 
   test:
     name: Test
@@ -34,10 +52,28 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libxkbcommon-dev libwayland-dev
+          sudo apt-get install -y \
+            pkg-config \
+            libasound2-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libgl1-mesa-dev \
+            libegl-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libdbus-1-dev
           sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
       - name: cargo test
-        run: cargo test --workspace
+        run: |
+          cargo test --workspace 2>&1 | tee /tmp/test.log; code=${PIPESTATUS[0]}
+          if [ $code -ne 0 ]; then
+            grep -E "^error|FAILED|panicked" /tmp/test.log | head -10 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit $code
+          fi
 
   clippy:
     name: Clippy
@@ -50,10 +86,28 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libxkbcommon-dev libwayland-dev
+          sudo apt-get install -y \
+            pkg-config \
+            libasound2-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libgl1-mesa-dev \
+            libegl-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libdbus-1-dev
           sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
       - name: cargo clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: |
+          cargo clippy --workspace -- -D warnings 2>&1 | tee /tmp/clippy.log; code=${PIPESTATUS[0]}
+          if [ $code -ne 0 ]; then
+            grep -E "^error" /tmp/clippy.log | head -10 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit $code
+          fi
 
   fmt:
     name: Rustfmt
@@ -92,7 +146,18 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libxkbcommon-dev libwayland-dev
+          sudo apt-get install -y \
+            pkg-config \
+            libasound2-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libgl1-mesa-dev \
+            libegl-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libdbus-1-dev
           sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
 
       - name: "M1 — 365/365 SAPF unit tests"
