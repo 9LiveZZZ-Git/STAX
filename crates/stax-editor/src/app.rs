@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use egui::{pos2, vec2, Pos2, Rect, Stroke, Vec2};
 use stax_core::Op;
 use stax_eval::Interp;
@@ -66,6 +66,11 @@ pub struct StaxApp {
     pub selected_edge: Option<stax_graph::EdgeId>,
     pub dragging: Option<NodeId>,
 
+    // D1: Multi-select via marquee rubber-band
+    pub selected_nodes: HashSet<NodeId>,
+    pub marquee_start: Option<Pos2>,   // screen-space anchor
+    pub marquee_rect:  Option<Rect>,   // screen-space live rect during drag
+
     // Wire creation (A1)
     pub in_progress_wire: Option<stax_graph::PortRef>,
     pub wire_ghost_end: Option<Pos2>,
@@ -73,6 +78,10 @@ pub struct StaxApp {
     // Library drag (A5)
     pub lib_drag_word: Option<String>,
     pub lib_drag_ghost: Option<Pos2>,
+
+    // D6: DOT viewer
+    pub show_dot_window: bool,
+    pub dot_source: String,
 
     // Text view state
     pub cursor_line: usize,
@@ -172,10 +181,15 @@ impl StaxApp {
             selected_node: None,
             selected_edge: None,
             dragging: None,
+            selected_nodes: HashSet::new(),
+            marquee_start: None,
+            marquee_rect: None,
             in_progress_wire: None,
             wire_ghost_end: None,
             lib_drag_word: None,
             lib_drag_ghost: None,
+            show_dot_window: false,
+            dot_source: String::new(),
             cursor_line: 1,
             cursor_col: 1,
             cursor_stack: Vec::new(),
@@ -283,10 +297,15 @@ impl StaxApp {
             selected_node: None,
             selected_edge: None,
             dragging: None,
+            selected_nodes: HashSet::new(),
+            marquee_start: None,
+            marquee_rect: None,
             in_progress_wire: None,
             wire_ghost_end: None,
             lib_drag_word: None,
             lib_drag_ghost: None,
+            show_dot_window: false,
+            dot_source: String::new(),
             cursor_line: 1,
             cursor_col: 1,
             cursor_stack: Vec::new(),
@@ -583,6 +602,11 @@ impl StaxApp {
                 .show_separator_line(false).show(ctx, |ui| self.draw_timebar(ui));
         }
 
+        // D6: DOT viewer window (shown as a floating overlay)
+        if self.show_dot_window {
+            crate::dot::draw_dot_window(ctx, &mut self.show_dot_window, &mut self.dot_source, &self.graph);
+        }
+
         match self.view {
             View::Graph => {
                 egui::SidePanel::left("rf_lib").exact_width(shell::LIB_W).frame(frame_none)
@@ -716,6 +740,11 @@ impl eframe::App for StaxApp {
                 .frame(frame_none)
                 .show_separator_line(false)
                 .show(ctx, |ui| self.draw_timebar(ui));
+        }
+
+        // D6: DOT viewer window
+        if self.show_dot_window {
+            crate::dot::draw_dot_window(ctx, &mut self.show_dot_window, &mut self.dot_source, &self.graph);
         }
 
         // ── View-specific side panels & central area ───────────────────────
@@ -858,6 +887,13 @@ impl StaxApp {
                 }
                 if ui.button("fit to nodes").clicked() {
                     self.fit_canvas_to_nodes();
+                    ui.close_menu();
+                }
+                ui.separator();
+                // D6: DOT viewer
+                if ui.button("show DOT…").clicked() {
+                    self.dot_source = crate::dot::graph_to_dot(&self.graph);
+                    self.show_dot_window = true;
                     ui.close_menu();
                 }
             });
@@ -1424,12 +1460,22 @@ impl StaxApp {
             })
         });
 
-        // ── Delete key: remove selected node or edge ────────────────────────
+        // ── Delete key: remove selected node(s) or edge ─────────────────────
         let delete_pressed = ui.input(|i| i.key_pressed(egui::Key::Delete)
             || i.key_pressed(egui::Key::Backspace));
         if delete_pressed {
             if let Some(eid) = self.selected_edge.take() {
                 self.graph.remove_edge(eid);
+                self.commit_graph_edit();
+            } else if !self.selected_nodes.is_empty() {
+                let to_delete: Vec<NodeId> = self.selected_nodes.drain().collect();
+                for nid in &to_delete {
+                    self.graph.remove_node(*nid);
+                    self.node_positions.remove(nid);
+                }
+                if let Some(sel) = self.selected_node {
+                    if to_delete.contains(&sel) { self.selected_node = None; }
+                }
                 self.commit_graph_edit();
             } else if let Some(nid) = self.selected_node.take() {
                 self.graph.remove_node(nid);
@@ -1438,7 +1484,7 @@ impl StaxApp {
             }
         }
 
-        // ── drag_started: wire creation or node drag ────────────────────────
+        // ── drag_started: wire creation, node drag, or marquee ──────────────
         if response.drag_started() && !alt {
             if let Some(p) = ptr {
                 if let Some((nid, port_idx)) = hovered_output {
@@ -1447,20 +1493,24 @@ impl StaxApp {
                     self.wire_ghost_end = Some(p);
                     self.dragging = None;
                 } else {
-                    // Start node drag or empty-space pan
+                    // Start node drag or marquee on empty space
                     self.in_progress_wire = None;
                     let hit = self.graph.nodes_in_order()
                         .find(|n| node_screen_rects.get(&n.id).is_some_and(|r| r.contains(p)))
                         .map(|n| n.id);
                     self.dragging = hit;
+                    // D1: Begin marquee when dragging over empty space
+                    if hit.is_none() {
+                        self.marquee_start = Some(p);
+                        self.marquee_rect  = None;
+                    }
                 }
             }
         }
 
-        // ── Primary drag: update wire ghost or move node ────────────────────
+        // ── Primary drag: wire ghost, node move, or marquee update ──────────
         if response.dragged_by(egui::PointerButton::Primary) && !alt {
             if self.in_progress_wire.is_some() {
-                // Update ghost endpoint from cursor
                 if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
                     self.wire_ghost_end = Some(p);
                 }
@@ -1470,16 +1520,20 @@ impl StaxApp {
                     pos.x += canvas_delta.x;
                     pos.y += canvas_delta.y;
                 }
+            } else if let Some(anchor) = self.marquee_start {
+                // D1: Update marquee rect
+                if let Some(cur) = ui.input(|i| i.pointer.interact_pos()) {
+                    self.marquee_rect = Some(Rect::from_two_pos(anchor, cur));
+                }
             } else {
                 self.canvas_pan += response.drag_delta() / self.canvas_zoom;
             }
         }
 
-        // ── drag released: finish wire or clear drag ────────────────────────
+        // ── drag released: finish wire, marquee select, or clear drag ────────
         if response.drag_stopped() {
             if let Some(src_ref) = self.in_progress_wire.take() {
                 if let Some(drop_p) = self.wire_ghost_end.take() {
-                    // Find input port at drop position
                     let dst = self.graph.nodes_in_order().find_map(|n| {
                         let sp = self.node_positions.get(&n.id).map(|&p| to_screen(p))?;
                         crate::graph::port_at_screen(drop_p, n, sp, zoom, false)
@@ -1492,23 +1546,43 @@ impl StaxApp {
                     }
                 }
             }
+            // D1: Collect nodes inside marquee
+            if let Some(mrect) = self.marquee_rect.take() {
+                self.selected_nodes.clear();
+                for node in self.graph.nodes_in_order() {
+                    if let Some(sr) = node_screen_rects.get(&node.id) {
+                        if mrect.intersects(*sr) {
+                            self.selected_nodes.insert(node.id);
+                        }
+                    }
+                }
+            }
+            self.marquee_start = None;
             self.wire_ghost_end = None;
             if !response.dragged() { self.dragging = None; }
         }
         if !response.dragged() { self.dragging = None; }
 
-        // ── Click: select node or edge ──────────────────────────────────────
+        // ── Click: select node or edge (Shift+click toggles marquee set) ─────
         if response.clicked() {
             if let Some(p) = ptr {
-                // Badge zone checks happen in the interact_zones loop below.
-
-                // Try to select node
+                let shift = ui.input(|i| i.modifiers.shift);
                 let hit_node = self.graph.nodes_in_order()
                     .find(|n| node_screen_rects.get(&n.id).is_some_and(|r| r.contains(p)))
                     .map(|n| n.id);
                 if let Some(nid) = hit_node {
-                    self.selected_node = Some(nid);
-                    self.selected_edge = None;
+                    if shift {
+                        // D1: Shift+click toggles node in multi-select set
+                        if self.selected_nodes.contains(&nid) {
+                            self.selected_nodes.remove(&nid);
+                        } else {
+                            self.selected_nodes.insert(nid);
+                        }
+                    } else {
+                        self.selected_node = Some(nid);
+                        self.selected_edge = None;
+                        self.selected_nodes.clear();
+                    }
                 } else {
                     // Try to select edge
                     let mut hit_edge = None;
@@ -1534,6 +1608,7 @@ impl StaxApp {
                     } else {
                         self.selected_node = None;
                         self.selected_edge = None;
+                        if !shift { self.selected_nodes.clear(); }
                     }
                 }
             }
@@ -1604,7 +1679,7 @@ impl StaxApp {
         for node in self.graph.nodes_in_order() {
             let pos = self.node_positions.get(&node.id).copied().unwrap_or(pos2(20.0, 20.0));
             let sp  = to_screen(pos);
-            let sel = self.selected_node == Some(node.id);
+            let sel = self.selected_node == Some(node.id) || self.selected_nodes.contains(&node.id);
             let hov = hover_pos.is_some_and(|p| {
                 node_screen_rects.get(&node.id).is_some_and(|r| r.contains(p))
             });
@@ -1658,21 +1733,81 @@ impl StaxApp {
             }
         }
 
-        // ── Context menu: A3 node ops + A4 add-node ─────────────────────────
-        // Capture right-click position before the closure (borrow order)
-        let ctx_menu_hovered_node = hovered_node;
+        // ── Context menu: D2 port ops + D3 wire ops + D5 info + A3/A4 ────────
+        // Pre-compute hovered input port and hovered edge for context menu use.
+        let ctx_hovered_node  = hovered_node;
+        let ctx_hovered_input: Option<(NodeId, u8, stax_graph::PortKind)> =
+            hover_pos.and_then(|hp| {
+                self.graph.nodes_in_order().find_map(|n| {
+                    let sp = self.node_positions.get(&n.id).map(|&p| to_screen(p))?;
+                    crate::graph::port_at_screen(hp, n, sp, zoom, false).map(|pi| {
+                        let kind = n.inputs.get(pi as usize)
+                            .map(|p| p.kind)
+                            .unwrap_or(stax_graph::PortKind::Any);
+                        (n.id, pi, kind)
+                    })
+                })
+            });
+        let ctx_hovered_edge: Option<stax_graph::EdgeId> =
+            if ctx_hovered_node.is_none() {
+                hover_pos.and_then(|hp| {
+                    self.graph.edges().iter().find_map(|edge| {
+                        let sp = self.graph.node(edge.src.node).and_then(|n| {
+                            let p = self.node_positions.get(&n.id).copied()?;
+                            Some(crate::graph::port_screen_pos(to_screen(p), n, edge.src.port, true))
+                        });
+                        let dp = self.graph.node(edge.dst.node).and_then(|n| {
+                            let p = self.node_positions.get(&n.id).copied()?;
+                            Some(crate::graph::port_screen_pos(to_screen(p), n, edge.dst.port, false))
+                        });
+                        match (sp, dp) {
+                            (Some(s), Some(d)) if crate::graph::bezier_hit_test(s, d, hp, zoom) => Some(edge.id),
+                            _ => None,
+                        }
+                    })
+                })
+            } else {
+                None
+            };
+
         response.context_menu(|ui| {
-            if let Some(nid) = ctx_menu_hovered_node {
+            if let Some(nid) = ctx_hovered_node {
+                // D5: function info header
+                if let Some(node) = self.graph.node(nid) {
+                    let label = node.label();
+                    if let Some(desc) = crate::graph::word_description(&label) {
+                        ui.label(egui::RichText::new(desc).color(shell::INK_2).size(10.0).monospace());
+                    }
+                    let arity_str = crate::graph::node_arity_string(node);
+                    let type_str  = crate::graph::node_port_type_string(node);
+                    if !arity_str.is_empty() {
+                        ui.label(egui::RichText::new(arity_str).color(shell::INK_3).size(9.0).monospace());
+                    }
+                    if !type_str.is_empty() {
+                        ui.label(egui::RichText::new(type_str).color(shell::INK_3).size(9.0).monospace());
+                    }
+                    ui.separator();
+                }
+
                 if ui.button("Delete node").clicked() {
                     ui.close_menu();
-                    // Defer to next frame via a flag; we're inside a closure here.
-                    // Use selected_node as the deferred delete signal.
-                    // The delete key handler above will fire next frame.
-                    // For immediate effect, we set selected_node + call delete inline:
                     self.graph.remove_node(nid);
                     self.node_positions.remove(&nid);
                     if self.selected_node == Some(nid) { self.selected_node = None; }
+                    self.selected_nodes.remove(&nid);
                     self.commit_graph_edit();
+                }
+                if !self.selected_nodes.is_empty() {
+                    if ui.button(format!("Delete {} selected", self.selected_nodes.len())).clicked() {
+                        ui.close_menu();
+                        let to_del: Vec<NodeId> = self.selected_nodes.drain().collect();
+                        for did in &to_del {
+                            self.graph.remove_node(*did);
+                            self.node_positions.remove(did);
+                            if self.selected_node == Some(*did) { self.selected_node = None; }
+                        }
+                        self.commit_graph_edit();
+                    }
                 }
                 if ui.button("Disconnect all").clicked() {
                     ui.close_menu();
@@ -1680,7 +1815,44 @@ impl StaxApp {
                     for eid in eids { self.graph.remove_edge(eid); }
                     self.commit_graph_edit();
                 }
+
+                // D2: Port-specific ops when a Fun input is hovered
+                if let Some((port_nid, port_idx, kind)) = ctx_hovered_input {
+                    if port_nid == nid {
+                        ui.separator();
+                        if kind == stax_graph::PortKind::Fun {
+                            if ui.button("View fn body").clicked() {
+                                ui.close_menu();
+                                self.fnport.selected_node = Some(nid);
+                                self.view = crate::app::View::FnPort;
+                            }
+                        }
+                        if ui.button(format!("Disconnect port in:{port_idx}")).clicked() {
+                            ui.close_menu();
+                            let eids: Vec<_> = self.graph.edges().iter()
+                                .filter(|e| e.dst.node == nid && e.dst.port == port_idx)
+                                .map(|e| e.id)
+                                .collect();
+                            for eid in eids { self.graph.remove_edge(eid); }
+                            self.commit_graph_edit();
+                        }
+                    }
+                }
+
                 ui.separator();
+            }
+
+            // D3: Wire delete when hovering edge but no node
+            if ctx_hovered_node.is_none() {
+                if let Some(eid) = ctx_hovered_edge {
+                    if ui.button("Delete wire").clicked() {
+                        ui.close_menu();
+                        self.graph.remove_edge(eid);
+                        if self.selected_edge == Some(eid) { self.selected_edge = None; }
+                        self.commit_graph_edit();
+                    }
+                    ui.separator();
+                }
             }
 
             // A4: add-node submenu
@@ -1729,19 +1901,52 @@ impl StaxApp {
                         shell::PORT_FUN);
                 }
             }
-            // On pointer release: drop onto canvas
+            // On pointer release: drop onto canvas (D4: drop on Fun port → quote node)
             if !ui.input(|i| i.pointer.any_down()) {
                 if let Some(ghost_screen) = self.lib_drag_ghost {
                     if rect.contains(ghost_screen) {
+                        // D4: check if dropping onto a Fun input port
+                        let fun_port_target: Option<(NodeId, u8)> =
+                            self.graph.nodes_in_order().find_map(|n| {
+                                let sp = self.node_positions.get(&n.id).map(|&p| to_screen(p))?;
+                                let pi = crate::graph::port_at_screen(ghost_screen, n, sp, zoom, false)?;
+                                let kind = n.inputs.get(pi as usize).map(|p| p.kind)?;
+                                if kind == stax_graph::PortKind::Fun {
+                                    Some((n.id, pi))
+                                } else {
+                                    None
+                                }
+                            });
+
                         let world_pos = crate::graph::screen_to_canvas(ghost_screen, pan, zoom, origin);
-                        let nid = self.graph.add_word_node(word);
-                        self.node_positions.insert(nid, world_pos);
+                        if let Some((dst_nid, dst_port)) = fun_port_target {
+                            // Create a quote node [word] and connect it to the Fun port
+                            let qops = stax_parser::parse(&format!("[{}]", word))
+                                .unwrap_or_default();
+                            let quote_nid = self.graph.add_word_node(&format!("[{}]", word));
+                            let offset_pos = pos2(world_pos.x - 120.0, world_pos.y);
+                            self.node_positions.insert(quote_nid, offset_pos);
+                            let src_ref = stax_graph::PortRef { node: quote_nid, port: 0 };
+                            let dst_ref = stax_graph::PortRef { node: dst_nid,   port: dst_port };
+                            let _ = self.graph.add_edge(src_ref, dst_ref);
+                            let _ = qops; // suppress warning
+                        } else {
+                            let nid = self.graph.add_word_node(word);
+                            self.node_positions.insert(nid, world_pos);
+                        }
                         self.commit_graph_edit();
                     }
                 }
                 self.lib_drag_word = None;
                 self.lib_drag_ghost = None;
             }
+        }
+
+        // D1: Draw marquee rect
+        if let Some(mrect) = self.marquee_rect {
+            let fill = egui::Color32::from_rgba_premultiplied(201, 72, 32, 20);
+            painter.rect_filled(mrect, 0.0, fill);
+            painter.rect_stroke(mrect, 0.0, Stroke::new(1.0, shell::WARM), egui::StrokeKind::Outside);
         }
 
         // Legend

@@ -470,6 +470,89 @@ pub fn draw_wire_ghost(painter: &Painter, from: Pos2, to: Pos2, zoom: f32) {
     }
 }
 
+// ── D5: Word info helpers ──────────────────────────────────────────────────
+
+/// Short description of a built-in word for the right-click context menu.
+pub fn word_description(word: &str) -> Option<&'static str> {
+    match word {
+        "+" | "-" | "*" | "/" => Some("arithmetic binary op"),
+        "pow"   => Some("raise to power"),
+        "sqrt"  => Some("square root"),
+        "abs"   => Some("absolute value"),
+        "neg"   => Some("negate"),
+        "%" | "mod" => Some("modulo"),
+        "min"   => Some("minimum of two values"),
+        "max"   => Some("maximum of two values"),
+        "clip"  => Some("clip to range [lo, hi]"),
+        "floor" | "ceil" | "round" | "trunc" => Some("rounding function"),
+        "sinosc" => Some("band-limited sine oscillator"),
+        "saw" | "lfsaw" => Some("sawtooth oscillator"),
+        "pulse" => Some("pulse / square oscillator"),
+        "tri"   => Some("triangle oscillator"),
+        "wnoise" | "white" => Some("white noise generator"),
+        "pink" | "pnoise"  => Some("pink (1/f) noise"),
+        "brown"  => Some("brownian noise"),
+        "lpf" | "lpf2" => Some("2-pole lowpass filter"),
+        "hpf" | "hpf2" => Some("2-pole highpass filter"),
+        "svflp" => Some("SVF lowpass (Chamberlin)"),
+        "svfhp" => Some("SVF highpass (Chamberlin)"),
+        "svfbp" => Some("SVF bandpass (Chamberlin)"),
+        "rlpf"  => Some("resonant lowpass filter"),
+        "rhpf"  => Some("resonant highpass filter"),
+        "verb"  => Some("FDN reverb (Jot/Hadamard)"),
+        "pan2"  => Some("stereo panning"),
+        "play"  => Some("send to audio output (sink)"),
+        "stop"  => Some("stop audio playback"),
+        "p"     => Some("print top of stack"),
+        "trace" => Some("print with label"),
+        "ar"    => Some("attack-release envelope"),
+        "adsr"  => Some("4-stage ADSR envelope"),
+        "ord"   => Some("finite integer sequence 0..N"),
+        "nat"   => Some("infinite natural numbers 0,1,2,…"),
+        "ordz"  => Some("infinite 1,2,3,… sequence"),
+        "by"    => Some("arithmetic sequence (start step)"),
+        "cyc"   => Some("cycle a list infinitely"),
+        "N"     => Some("take N elements from stream"),
+        "take"  => Some("take first N elements"),
+        "drop"  => Some("drop first N elements"),
+        "zip"   => Some("interleave two streams"),
+        "dup"   => Some("duplicate top of stack"),
+        "swap"  => Some("swap top two stack items"),
+        "over"  => Some("copy second item to top"),
+        "drop2" => Some("drop top stack item"),
+        _       => None,
+    }
+}
+
+/// Short arity string for a node, e.g. "2 in → 1 out".
+pub fn node_arity_string(node: &Node) -> String {
+    format!("{} in → {} out", node.inputs.len(), node.outputs.len())
+}
+
+/// Port type summary string, e.g. "in: real signal  out: signal".
+pub fn node_port_type_string(node: &Node) -> String {
+    let ins: Vec<&str> = node.inputs.iter().map(|p| port_kind_name(&p.kind)).collect();
+    let outs: Vec<&str> = node.outputs.iter().map(|p| port_kind_name(&p.kind)).collect();
+    if ins.is_empty() && outs.is_empty() { return String::new(); }
+    let mut s = String::new();
+    if !ins.is_empty()  { s.push_str(&format!("in: {}  ", ins.join(" "))); }
+    if !outs.is_empty() { s.push_str(&format!("out: {}", outs.join(" "))); }
+    s
+}
+
+fn port_kind_name(kind: &PortKind) -> &'static str {
+    match kind {
+        PortKind::Real   => "real",
+        PortKind::Signal => "signal",
+        PortKind::Stream => "stream",
+        PortKind::Fun    => "fun",
+        PortKind::Form   => "form",
+        PortKind::Any    => "any",
+        PortKind::Str    => "str",
+        PortKind::Sym    => "sym",
+    }
+}
+
 /// Port-type legend in the bottom-left of the canvas.
 pub fn draw_legend(painter: &Painter, rect: Rect) {
     let entries: &[(&str, PortKind)] = &[

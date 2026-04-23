@@ -33,6 +33,9 @@ pub struct FnPortState {
     pub subgraph_positions: HashMap<NodeId, Pos2>,
     /// The NodeId for which the subgraph was last built (cache key).
     pub subgraph_for: Option<NodeId>,
+    /// D7: Navigation stack for nested MakeFun drill-in.
+    /// Each entry: (parent_node_id, parent_subgraph, parent_positions, parent_pan, parent_zoom)
+    pub nav_stack: Vec<(NodeId, Option<Graph>, HashMap<NodeId, Pos2>, Vec2, f32)>,
 }
 
 impl Default for FnPortState {
@@ -45,6 +48,7 @@ impl Default for FnPortState {
             subgraph: None,
             subgraph_positions: HashMap::new(),
             subgraph_for: None,
+            nav_stack: Vec::new(),
         }
     }
 }
@@ -324,7 +328,7 @@ impl StaxApp {
         // Canvas border
         painter.rect_stroke(canvas_rect, 0.0, Stroke::new(1.0, shell::RULE), StrokeKind::Outside);
 
-        // ── Subgraph interaction (pan/zoom) ───────────────────────────────
+        // ── Subgraph interaction (pan/zoom + D7 double-click drill-in) ───────
 
         let canvas_resp = ui.allocate_rect(canvas_rect, egui::Sense::click_and_drag());
         let _ = clip_id; // suppress unused warning
@@ -351,6 +355,65 @@ impl StaxApp {
                 canvas_resp.drag_delta() / self.fnport.subgraph_zoom;
         }
 
+        // D7: Double-click on a MakeFun node in the subgraph drills in.
+        let dbl = canvas_resp.double_clicked();
+        if dbl {
+            if let Some(click_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                // Find which subgraph node was double-clicked.
+                let pan  = self.fnport.subgraph_pan;
+                let zoom = self.fnport.subgraph_zoom;
+                let origin = canvas_rect.min;
+                let to_screen = |p: Pos2| -> Pos2 { origin + (vec2(p.x, p.y) + pan) * zoom };
+
+                let hit_sub_nid: Option<NodeId> = if let Some(ref sub) = self.fnport.subgraph.clone() {
+                    sub.nodes_in_order().find_map(|sn| {
+                        let spos = self.fnport.subgraph_positions.get(&sn.id).copied()?;
+                        let ss = to_screen(spos);
+                        let sz = crate::graph::node_size(sn) * zoom;
+                        let nr = Rect::from_min_size(ss, sz);
+                        if nr.contains(click_pos) {
+                            // Only drill into MakeFun nodes
+                            if matches!(sn.kind, stax_graph::NodeKind::MakeFun { .. }) {
+                                Some(sn.id)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                };
+
+                if let Some(child_nid) = hit_sub_nid {
+                    if let Some(ref sub) = self.fnport.subgraph.clone() {
+                        if let Some(child_node) = sub.node(child_nid) {
+                            if let stax_graph::NodeKind::MakeFun { body, .. } = &child_node.kind {
+                                let body_ops = body.to_vec();
+                                // Push current state onto nav stack
+                                self.fnport.nav_stack.push((
+                                    nid,
+                                    self.fnport.subgraph.clone(),
+                                    self.fnport.subgraph_positions.clone(),
+                                    self.fnport.subgraph_pan,
+                                    self.fnport.subgraph_zoom,
+                                ));
+                                // Build new subgraph from child's body
+                                let new_sub = stax_graph::lift(&body_ops);
+                                let new_pos = crate::graph::auto_layout(&new_sub);
+                                self.fnport.subgraph           = Some(new_sub);
+                                self.fnport.subgraph_positions = new_pos;
+                                self.fnport.subgraph_for       = Some(child_nid);
+                                self.fnport.subgraph_pan       = Vec2::ZERO;
+                                self.fnport.subgraph_zoom      = 1.0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Toolbar strip ─────────────────────────────────────────────────
 
         painter.rect_filled(toolbar_rect, 0.0, shell::PAPER);
@@ -359,17 +422,19 @@ impl StaxApp {
             Stroke::new(1.0, shell::RULE),
         );
 
-        // Toolbar buttons rendered as small bordered label rects.
-        // We need mutable access for the "open in tab" click, so we track which
-        // button was clicked by first doing a read pass, then acting.
-        let buttons: &[&str] = &["promote", "unbind", "open in tab", "text"];
+        // D7: Build button list dynamically (add "← back" when nav_stack non-empty)
+        let has_back = !self.fnport.nav_stack.is_empty();
+        let mut buttons_vec: Vec<&str> = Vec::new();
+        if has_back { buttons_vec.push("← back"); }
+        buttons_vec.extend_from_slice(&["promote", "unbind", "open in tab", "text"]);
+        let buttons = buttons_vec.as_slice();
+
         let btn_h   = 18.0_f32;
         let btn_pad = 10.0_f32;
         let btn_gap = 6.0_f32;
         let mut bx  = toolbar_rect.min.x + 14.0;
         let btn_cy  = toolbar_rect.center().y;
 
-        // Measure button widths and collect rects first (no allocation yet)
         let font = egui::FontId::new(11.0, egui::FontFamily::Monospace);
         let mut btn_rects: Vec<Rect> = Vec::with_capacity(buttons.len());
         for label in buttons.iter() {
@@ -381,42 +446,50 @@ impl StaxApp {
             bx += w + btn_gap;
         }
 
-        // Determine hover / click state from stored pointer position.
         let ptr_pos = ui.input(|i| i.pointer.hover_pos());
         let clicked = ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary));
 
-        let mut open_in_tab_clicked = false;
+        let mut btn_clicked: Option<usize> = None;
         for (i, (label, brect)) in buttons.iter().zip(btn_rects.iter()).enumerate() {
             let hovered = ptr_pos.is_some_and(|p| brect.contains(p));
+            let is_back = has_back && i == 0;
             let bg   = if hovered { shell::PAPER_2 } else { shell::PAPER };
-            let fg   = if hovered { shell::INK }     else { shell::INK_2 };
-            let bord = if hovered { shell::INK_2 }   else { shell::RULE };
+            let fg   = if is_back  { shell::WARM }
+                       else if hovered { shell::INK } else { shell::INK_2 };
+            let bord = if is_back  { shell::WARM }
+                       else if hovered { shell::INK_2 } else { shell::RULE };
             painter.rect_filled(*brect, 0.0, bg);
             painter.rect_stroke(*brect, 0.0, Stroke::new(1.0, bord), StrokeKind::Outside);
-            painter.text(
-                brect.center(),
-                egui::Align2::CENTER_CENTER,
-                *label,
-                font.clone(),
-                fg,
-            );
-            if hovered && clicked && i == 2 {
-                // "open in tab" — index 2
-                open_in_tab_clicked = true;
+            painter.text(brect.center(), egui::Align2::CENTER_CENTER, *label, font.clone(), fg);
+            if hovered && clicked { btn_clicked = Some(i); }
+        }
+
+        if let Some(idx) = btn_clicked {
+            let adjusted = if has_back { idx } else { idx + 1 };
+            match adjusted {
+                // 0 = "← back" (only when has_back)
+                0 if has_back => {
+                    if let Some((parent_nid, parent_sub, parent_pos, parent_pan, parent_zoom)) =
+                        self.fnport.nav_stack.pop()
+                    {
+                        self.fnport.subgraph           = parent_sub;
+                        self.fnport.subgraph_positions = parent_pos;
+                        self.fnport.subgraph_for       = Some(parent_nid);
+                        self.fnport.subgraph_pan       = parent_pan;
+                        self.fnport.subgraph_zoom      = parent_zoom;
+                    }
+                }
+                // "open in tab" = index 3 when no back, 4 when back
+                i if i == (if has_back { 3 } else { 2 }) => {
+                    self.selected_node = Some(nid);
+                    self.view = View::Graph;
+                }
+                // "text" = index 4 when no back, 5 when back
+                i if i == (if has_back { 4 } else { 3 }) => {
+                    self.view = View::Text;
+                }
+                _ => {}
             }
-        }
-
-        if open_in_tab_clicked {
-            // Sync graph-view selection to the node we're inspecting, then switch.
-            self.selected_node = Some(nid);
-            self.view = View::Graph;
-        }
-
-        // "text" button (index 3) — jump to text view and try to show the MakeFun source line.
-        let text_clicked = ptr_pos.is_some_and(|p| btn_rects.get(3).is_some_and(|r| r.contains(p)))
-            && clicked;
-        if text_clicked {
-            self.view = View::Text;
         }
     }
 }
