@@ -1957,7 +1957,7 @@ impl StaxApp {
             painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "type in the REPL below to start\n\nexample:  440 sinosc play",
+                "type in the REPL below to start\n\nexample:  440 0 sinosc play",
                 egui::FontId::new(13.0, egui::FontFamily::Monospace),
                 shell::INK_3,
             );
@@ -2052,8 +2052,8 @@ fn insp_kv(ui: &mut egui::Ui, key: &str, val: &str) {
 const DEFAULT_SOURCE: &str = "\
 // stax — sound as pure form
 
-440 sinosc                     // sine oscillator
-2 sinosc 0.5 * 0.5 +           // AM modulator  [0.5..1.0]
+440 0 sinosc                   // sine oscillator
+2 0 sinosc 0.5 * 0.5 +         // AM modulator  [0.5..1.0]
 *                              // amplitude modulation
 play                           // send to audio output
 ";

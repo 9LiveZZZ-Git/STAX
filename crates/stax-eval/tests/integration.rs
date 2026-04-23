@@ -493,3 +493,38 @@ fn at_out_of_bounds() {
     let result = top_real("[10 20 30] 5 at");
     assert!((result - 0.0).abs() < 1e-12);
 }
+
+#[test]
+fn demo_patch_parses_and_evals() {
+    // Full layered synth demo: detuned saws + Karplus pluck + sub + filters + reverb
+    let src = "
+        220   0 saw
+        220.6 0 saw +
+        440   0 saw 0.3 * +
+        0.22 *
+        1600 0.45 rlpf
+        110 0.992 pluck 0.55 *
+        55 0 sinosc 0.28 *
+        + +
+        1.4 tanhsat
+        3200 0.6 svflp
+        8 2.2 0.72 verb
+        0.42 *
+        play
+    ";
+    let i = run(src);
+    assert!(i.stack.len() <= 1, "unexpected stack depth: {}", i.stack.len());
+}
+
+#[test]
+fn sinosc_two_arg_convention() {
+    // Verify: freq phase sinosc (phase is TOS, freq is second)
+    let mut i = run("440 0 sinosc");
+    assert!(matches!(i.stack.pop().unwrap(), Value::Signal(_)));
+    // Confirm saw is same: freq phase saw
+    let mut i2 = run("220 0 saw");
+    assert!(matches!(i2.stack.pop().unwrap(), Value::Signal(_)));
+    // Now: saw + sinosc mixing
+    let mut i3 = run("220 0 saw  55 0 sinosc  +");
+    assert!(matches!(i3.stack.pop().unwrap(), Value::Signal(_)));
+}

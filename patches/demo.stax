@@ -1,0 +1,51 @@
+// stax demo patch — layered drone synth
+// Load in the editor or paste into REPL, then: play  (stop to stop)
+//
+// Three voices:
+//   1. Detuned saw pad      (220 Hz + 220.6 Hz + 440 Hz)
+//   2. Karplus-Strong bass  (110 Hz pluck, very slow decay)
+//   3. Sub sine             (55 Hz pure tone)
+//
+// Chain: mix → resonant LP filter → soft saturation → FDN reverb → out
+
+// ── Voice 1: detuned saw pad ─────────────────────────────────────────────
+//   saw takes: freq phase saw
+220   0 saw                     // fundamental at A3
+220.6 0 saw                     // +~5 cents for chorus beating
++                               // mix the two saws
+440   0 saw 0.3 *               // add octave (A4) at 30% level
++
+0.22 *                          // pad master gain
+
+// Resonant lowpass to remove harsh high partials
+// signal cutoff rq rlpf
+1600 0.45 rlpf
+
+// ── Voice 2: Karplus-Strong pluck bass ───────────────────────────────────
+//   pluck takes: freq decay pluck
+110 0.992 pluck                 // A2, very slow decay ≈ several seconds
+0.55 *                          // bass gain
+
+// ── Voice 3: sub sine ────────────────────────────────────────────────────
+55 0 sinosc 0.28 *              // A1 sub, low level for body
+
+// ── Mix all three ────────────────────────────────────────────────────────
++                               // (bass + sub)
++                               // (pad + bass + sub)
+
+// ── Soft saturation — glues the mix and adds warmth ──────────────────────
+//   signal amount tanhsat
+1.4 tanhsat
+
+// ── Global SVF low-pass — removes any aliasing post-saturation ───────────
+//   signal freq q svflp
+3200 0.6 svflp
+
+// ── FDN reverb ───────────────────────────────────────────────────────────
+//   signal n decay room verb
+8 2.2 0.72 verb
+
+// ── Master volume ─────────────────────────────────────────────────────────
+0.42 *
+
+play
