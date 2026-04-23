@@ -84,16 +84,10 @@ pub trait SignalInstance: Send {
 
 // -------- silence --------------------------------------------------------
 
-/// The zero signal. Useful as a placeholder.
-pub struct Silence;
-
-impl Signal for Silence {
-    fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
-        Box::new(SilenceInstance)
-    }
-}
-
-pub struct SilenceInstance;
+/// Produces a block of silence. Used by `GenSignal::instantiate` as a no-op
+/// placeholder instance (GenSignal is pull-only via `take_n`; the instance
+/// is never actually driven during normal use).
+pub(crate) struct SilenceInstance;
 
 impl SignalInstance for SilenceInstance {
     fn fill(&mut self, out: &mut [f32]) {

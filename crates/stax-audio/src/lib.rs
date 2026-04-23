@@ -1,10 +1,7 @@
 //! Audio I/O. `cpal` on native, stub on WASM (AudioWorklet bridge lands in M6).
 //!
-//! The contract is small: give us a `Box<dyn SignalInstance>` already
-//! instantiated at a known sample rate, and we'll pump it to the speakers
-//! until `stop()` is called.
-
-use stax_core::SignalInstance;
+//! The contract is small: give us an `Arc<dyn Signal>` and a sample rate,
+//! and we'll pump it to the speakers until the returned `Voice` is dropped.
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::*;
@@ -133,7 +130,3 @@ pub fn play_blocking(
     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
     Ok(())
 }
-
-// Keep the trait object in scope for doc-linking convenience.
-#[allow(dead_code)]
-fn _use_instance(_i: Box<dyn SignalInstance>) {}

@@ -1093,6 +1093,21 @@ where F: Fn(&mut Interp) -> Result<()> + Send + Sync + 'static
     interp.builtins.insert(Arc::from(name), Arc::new(f));
 }
 
+/// Advance the interpreter's LCG RNG by one step and return the new seed.
+#[inline]
+fn rng_step(seed: &mut u64) -> u64 {
+    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *seed
+}
+
+/// Pop a Signal from the stack, returning a type error if TOS is not a Signal.
+fn pop_signal(i: &mut Interp) -> Result<Arc<dyn stax_core::Signal>> {
+    match i.pop()? {
+        Value::Signal(s) => Ok(s),
+        other => Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
+    }
+}
+
 fn install_builtins(i: &mut Interp) {
     // Arithmetic (auto-mapped)
     reg(i, "+",  |i| { let b=i.pop()?; let a=i.pop()?; i.push(automap_bin(a,b,|x,y|x+y)?); Ok(()) });
@@ -1865,8 +1880,8 @@ fn install_builtins(i: &mut Interp) {
     reg(i, "muss", |i| {
         let mut items = collect_to_vec(&i.pop()?)?;
         for k in (1..items.len()).rev() {
-            i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            let j = (i.rng_seed >> 33) as usize % (k + 1);
+            let s = rng_step(&mut i.rng_seed);
+            let j = (s >> 33) as usize % (k + 1);
             items.swap(k, j);
         }
         i.push(make_list(items)); Ok(())
@@ -2191,36 +2206,30 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // ---- M2: deterministic seeds ----------------------------------------
+    // ---- Deterministic RNG --------------------------------------------------
 
-    // seed: set the interpreter's RNG seed
     reg(i, "seed", |i| {
         let s = real_val(&i.pop()?)? as u64;
         i.rng_seed = s;
         Ok(())
     });
 
-    // rand: push a random Real in [0, 1) using the current seed
     reg(i, "rand", |i| {
-        i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        let v = (i.rng_seed >> 33) as f64 / u32::MAX as f64;
-        i.push(Value::Real(v));
+        let s = rng_step(&mut i.rng_seed);
+        i.push(Value::Real((s >> 33) as f64 / u32::MAX as f64));
         Ok(())
     });
 
-    // irand: n irand → random integer in [0, n)
     reg(i, "irand", |i| {
         let n = real_val(&i.pop()?)? as u64;
         if n == 0 { i.push(Value::Real(0.0)); return Ok(()); }
-        i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        let v = ((i.rng_seed >> 33) % n) as f64;
-        i.push(Value::Real(v));
+        let s = rng_step(&mut i.rng_seed);
+        i.push(Value::Real(((s >> 33) % n) as f64));
         Ok(())
     });
 
-    // ---- M3: DSP oscillators & generators -----------------------------------
+    // ---- DSP oscillators & generators ---------------------------------------
 
-    // sinosc: freq phase sinosc → Signal
     reg(i, "sinosc", |i| {
         let phase = real_val(&i.pop()?)? as f32;
         let freq  = real_val(&i.pop()?)? as f32;
@@ -2228,7 +2237,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // saw: freq phase saw → Signal
     reg(i, "saw", |i| {
         let phase = real_val(&i.pop()?)? as f32;
         let freq  = real_val(&i.pop()?)? as f32;
@@ -2236,7 +2244,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // lfsaw: alias for saw (low-frequency use — same implementation)
     reg(i, "lfsaw", |i| {
         let phase = real_val(&i.pop()?)? as f32;
         let freq  = real_val(&i.pop()?)? as f32;
@@ -2244,21 +2251,18 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // wnoise: seed wnoise → white noise Signal
     reg(i, "wnoise", |i| {
         let seed = real_val(&i.pop()?)? as u64;
         i.push(Value::Signal(Arc::new(stax_dsp::WhiteNoise::new(seed))));
         Ok(())
     });
 
-    // pnoise: seed pnoise → pink noise Signal
     reg(i, "pnoise", |i| {
         let seed = real_val(&i.pop()?)? as u64;
         i.push(Value::Signal(Arc::new(stax_dsp::PinkNoise::new(seed))));
         Ok(())
     });
 
-    // combn: input delay_samples coeff combn → filtered Signal
     reg(i, "combn", |i| {
         let coeff = real_val(&i.pop()?)? as f32;
         let delay = real_val(&i.pop()?)? as usize;
@@ -2273,7 +2277,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // pluck: freq decay_time pluck → Karplus-Strong Signal
     reg(i, "pluck", |i| {
         let decay = real_val(&i.pop()?)? as f32;
         let freq  = real_val(&i.pop()?)? as f32;
@@ -2281,7 +2284,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // ar: attack_secs release_secs ar → envelope Signal
     reg(i, "ar", |i| {
         let release = real_val(&i.pop()?)? as f32;
         let attack  = real_val(&i.pop()?)? as f32;
@@ -2289,7 +2291,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // adsr: attack decay sustain_level sustain_time release adsr → envelope Signal
     reg(i, "adsr", |i| {
         let release       = real_val(&i.pop()?)? as f32;
         let sustain_time  = real_val(&i.pop()?)? as f32;
@@ -2303,9 +2304,8 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // ---- M3: FFT ------------------------------------------------------------
+    // ---- FFT ----------------------------------------------------------------
 
-    // fft: signal fft → magnitude spectrum Signal (length n/2+1)
     reg(i, "fft", |i| {
         let sig = i.pop()?;
         let samples = collect_signal_f32(&sig)?;
@@ -2314,7 +2314,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // ifft: signal ifft → reconstructed signal (zero-phase)
     reg(i, "ifft", |i| {
         let sig = i.pop()?;
         let mags = collect_signal_f32(&sig)?;
@@ -2323,9 +2322,8 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // ---- M3: audio playback -------------------------------------------------
+    // ---- Audio playback -----------------------------------------------------
 
-    // play: signal play → starts audio (pushes Nil)
     reg(i, "play", |i| {
         let sig_val = i.pop()?;
         if let Value::Signal(sig) = sig_val {
@@ -2344,10 +2342,8 @@ fn install_builtins(i: &mut Interp) {
                 }
             }
             if let Some(rt) = &i.audio_rt.clone() {
-                match rt.play(sig) {
-                    Ok(voice) => i.voices.push(voice),
-                    Err(e) => eprintln!("stax: play error: {e}"),
-                }
+                let voice = rt.play(sig).map_err(|e| Error::Other(format!("play: {e}")))?;
+                i.voices.push(voice);
             }
             i.push(Value::Nil);
         } else {
@@ -2356,16 +2352,14 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // stop: drop all voices (stops all audio)
     reg(i, "stop", |i| {
         i.voices.clear();
         i.push(Value::Nil);
         Ok(())
     });
 
-    // ---- M3: MIDI -----------------------------------------------------------
+    // ---- MIDI ---------------------------------------------------------------
 
-    // midiPorts: → [port-name, ...]
     reg(i, "midiPorts", |i| {
         let ports = stax_io::MidiOut::ports();
         let vals: Vec<Value> = ports.into_iter()
@@ -2375,7 +2369,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // port_idx midiConnect: open MIDI output at port index
     reg(i, "midiConnect", |i| {
         let idx = real_val(&i.pop()?)? as usize;
         match stax_io::MidiOut::connect(idx) {
@@ -2385,7 +2378,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // [byte, byte, ...] midiSend: send raw MIDI bytes
     reg(i, "midiSend", |i| {
         let bytes_val = i.pop()?;
         let bytes_list = collect_to_vec(&bytes_val)?;
@@ -2400,7 +2392,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // channel note velocity noteOn
     reg(i, "noteOn", |i| {
         let vel = real_val(&i.pop()?)? as u8;
         let note = real_val(&i.pop()?)? as u8;
@@ -2413,7 +2404,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // channel note velocity noteOff
     reg(i, "noteOff", |i| {
         let vel = real_val(&i.pop()?)? as u8;
         let note = real_val(&i.pop()?)? as u8;
@@ -2426,7 +2416,6 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // channel controller value midiCC
     reg(i, "midiCC", |i| {
         let val = real_val(&i.pop()?)? as u8;
         let ctrl = real_val(&i.pop()?)? as u8;
@@ -2439,9 +2428,8 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // ---- M3: OSC ------------------------------------------------------------
+    // ---- OSC ----------------------------------------------------------------
 
-    // host port "/addr" [args] oscSend: send an OSC message
     // args: list of Reals (sent as OscFloat) or Strings (sent as OscString)
     reg(i, "oscSend", |i| {
         #[cfg(not(target_arch = "wasm32"))]
@@ -2484,19 +2472,17 @@ fn install_builtins(i: &mut Interp) {
 
     // ---- Conversion: MIDI note ↔ Hz -----------------------------------------
 
-    // note midihz → Hz (A4=69=440Hz)
+    // A4 = MIDI 69 = 440 Hz
     reg(i, "midihz", |i| {
         let v = i.pop()?;
         i.push(automap_unary(v, |note| 440.0 * 2f64.powf((note - 69.0) / 12.0))?);
         Ok(())
     });
-    // hz midinote → nearest MIDI note
     reg(i, "midinote", |i| {
         let v = i.pop()?;
         i.push(automap_unary(v, |hz| 69.0 + 12.0 * (hz / 440.0).log2())?);
         Ok(())
     });
-    // x lo hi bilin → map x from [-1,1] to [lo,hi]
     reg(i, "bilin", |i| {
         let hi = real_val(&i.pop()?)?;
         let lo = real_val(&i.pop()?)?;
@@ -2505,7 +2491,6 @@ fn install_builtins(i: &mut Interp) {
         i.push(mapped);
         Ok(())
     });
-    // x lo hi biexp → map x from [-1,1] to [lo,hi] exponentially
     reg(i, "biexp", |i| {
         let hi = real_val(&i.pop()?)?;
         let lo = real_val(&i.pop()?)?;
@@ -2517,57 +2502,31 @@ fn install_builtins(i: &mut Interp) {
 
     // ---- Zero-arg noise (SAPF naming) -----------------------------------------
 
-    // white → white noise Signal using interpreter RNG seed
-    reg(i, "white", |i| {
-        let seed = {
-            i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            i.rng_seed
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::WhiteNoise::new(seed))));
-        Ok(())
-    });
-    // pink → pink noise Signal
-    reg(i, "pink", |i| {
-        let seed = {
-            i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            i.rng_seed
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::PinkNoise::new(seed))));
-        Ok(())
-    });
-    // brown → brown (integrated white) noise Signal
-    reg(i, "brown", |i| {
-        let seed = {
-            i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            i.rng_seed
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::BrownNoise::new(seed))));
-        Ok(())
-    });
+    // white / pink / brown → noise Signals seeded from interpreter RNG
+    reg(i, "white", |i| { let seed = rng_step(&mut i.rng_seed); i.push(Value::Signal(Arc::new(stax_dsp::WhiteNoise::new(seed)))); Ok(()) });
+    reg(i, "pink",  |i| { let seed = rng_step(&mut i.rng_seed); i.push(Value::Signal(Arc::new(stax_dsp::PinkNoise::new(seed)))); Ok(()) });
+    reg(i, "brown", |i| { let seed = rng_step(&mut i.rng_seed); i.push(Value::Signal(Arc::new(stax_dsp::BrownNoise::new(seed)))); Ok(()) });
 
     // ---- Oscillators --------------------------------------------------------
 
-    // freq phase tri → triangle Signal
     reg(i, "tri", |i| {
         let phase = real_val(&i.pop()?)? as f32;
         let freq  = real_val(&i.pop()?)? as f32;
         i.push(Value::Signal(Arc::new(stax_dsp::TriOsc::with_phase(freq, phase))));
         Ok(())
     });
-    // freq duty pulse → pulse Signal (duty 0..1; 0.5 = square)
+    // duty 0..1; 0.5 = square wave
     reg(i, "pulse", |i| {
         let duty = real_val(&i.pop()?)? as f32;
         let freq = real_val(&i.pop()?)? as f32;
         i.push(Value::Signal(Arc::new(stax_dsp::PulseOsc::new(freq, duty))));
         Ok(())
     });
-    // freq square → square wave Signal (duty=0.5)
     reg(i, "square", |i| {
         let freq = real_val(&i.pop()?)? as f32;
         i.push(Value::Signal(Arc::new(stax_dsp::PulseOsc::new(freq, 0.5))));
         Ok(())
     });
-    // freq impulse → impulse train Signal
     reg(i, "impulse", |i| {
         let freq = real_val(&i.pop()?)? as f32;
         i.push(Value::Signal(Arc::new(stax_dsp::ImpulseSignal::new(freq))));
@@ -2576,121 +2535,23 @@ fn install_builtins(i: &mut Interp) {
 
     // ---- Filters ------------------------------------------------------------
 
-    // signal cutoff lpf1 → 1-pole LP-filtered Signal
-    reg(i, "lpf1", |i| {
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::Lpf1Signal { input, cutoff_hz: cutoff })));
-        Ok(())
-    });
-    // signal cutoff lpf → 2nd-order Butterworth LP-filtered Signal
-    reg(i, "lpf", |i| {
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::Lpf2Signal { input, cutoff_hz: cutoff })));
-        Ok(())
-    });
-    // signal cutoff lpf2 → alias for lpf
-    reg(i, "lpf2", |i| {
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::Lpf2Signal { input, cutoff_hz: cutoff })));
-        Ok(())
-    });
-    // signal cutoff hpf1 → 1-pole HP-filtered Signal
-    reg(i, "hpf1", |i| {
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::Hpf1Signal { input, cutoff_hz: cutoff })));
-        Ok(())
-    });
-    // signal cutoff hpf → 2nd-order Butterworth HP-filtered Signal
-    reg(i, "hpf", |i| {
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::Hpf2Signal { input, cutoff_hz: cutoff })));
-        Ok(())
-    });
-    // signal cutoff hpf2 → alias for hpf
-    reg(i, "hpf2", |i| {
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::Hpf2Signal { input, cutoff_hz: cutoff })));
-        Ok(())
-    });
-    // signal cutoff rq rlpf → resonant LP filter (rq = 1/Q)
-    reg(i, "rlpf", |i| {
-        let rq     = real_val(&i.pop()?)? as f32;
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::RlpfSignal { input, cutoff_hz: cutoff, rq })));
-        Ok(())
-    });
-    // signal cutoff rq rhpf → resonant HP filter
-    reg(i, "rhpf", |i| {
-        let rq     = real_val(&i.pop()?)? as f32;
-        let cutoff = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::RhpfSignal { input, cutoff_hz: cutoff, rq })));
-        Ok(())
-    });
-    // signal lag_time lag → 1-pole lag filter
-    reg(i, "lag", |i| {
-        let lag_time = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::LagSignal { input, lag_time })));
-        Ok(())
-    });
-    // signal lag_time lag2 → 2-stage lag filter
-    reg(i, "lag2", |i| {
-        let lag_time = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::Lag2Signal { input, lag_time })));
-        Ok(())
-    });
-    // signal leakdc → DC-blocking filter
-    reg(i, "leakdc", |i| {
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        i.push(Value::Signal(Arc::new(stax_dsp::LeakDcSignal { input })));
-        Ok(())
-    });
+    reg(i, "lpf1",  |i| { let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::Lpf1Signal { input, cutoff_hz: cutoff }))); Ok(()) });
+    // lpf and lpf2 are the same 2nd-order Butterworth LP filter
+    reg(i, "lpf",   |i| { let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::Lpf2Signal { input, cutoff_hz: cutoff }))); Ok(()) });
+    reg(i, "lpf2",  |i| { let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::Lpf2Signal { input, cutoff_hz: cutoff }))); Ok(()) });
+    reg(i, "hpf1",  |i| { let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::Hpf1Signal { input, cutoff_hz: cutoff }))); Ok(()) });
+    // hpf and hpf2 are the same 2nd-order Butterworth HP filter
+    reg(i, "hpf",   |i| { let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::Hpf2Signal { input, cutoff_hz: cutoff }))); Ok(()) });
+    reg(i, "hpf2",  |i| { let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::Hpf2Signal { input, cutoff_hz: cutoff }))); Ok(()) });
+    // signal cutoff rq rlpf/rhpf → resonant filters (rq = 1/Q)
+    reg(i, "rlpf",  |i| { let rq = real_val(&i.pop()?)? as f32; let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::RlpfSignal { input, cutoff_hz: cutoff, rq }))); Ok(()) });
+    reg(i, "rhpf",  |i| { let rq = real_val(&i.pop()?)? as f32; let cutoff = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::RhpfSignal { input, cutoff_hz: cutoff, rq }))); Ok(()) });
+    reg(i, "lag",   |i| { let lag_time = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::LagSignal { input, lag_time }))); Ok(()) });
+    reg(i, "lag2",  |i| { let lag_time = real_val(&i.pop()?)? as f32; let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::Lag2Signal { input, lag_time }))); Ok(()) });
+    reg(i, "leakdc",|i| { let input = pop_signal(i)?; i.push(Value::Signal(Arc::new(stax_dsp::LeakDcSignal { input }))); Ok(()) });
 
     // ---- Control signals ----------------------------------------------------
 
-    // start end dur line → linear ramp Signal
     reg(i, "line", |i| {
         let dur   = real_val(&i.pop()?)? as f32;
         let end   = real_val(&i.pop()?)? as f32;
@@ -2698,7 +2559,6 @@ fn install_builtins(i: &mut Interp) {
         i.push(Value::Signal(Arc::new(stax_dsp::LineSignal { start, end, dur_secs: dur })));
         Ok(())
     });
-    // start end dur xline → exponential ramp Signal
     reg(i, "xline", |i| {
         let dur   = real_val(&i.pop()?)? as f32;
         let end   = real_val(&i.pop()?)? as f32;
@@ -2706,7 +2566,6 @@ fn install_builtins(i: &mut Interp) {
         i.push(Value::Signal(Arc::new(stax_dsp::XlineSignal { start, end, dur_secs: dur })));
         Ok(())
     });
-    // dur decay → exponential decay Signal (1 → 0 over dur seconds)
     reg(i, "decay", |i| {
         let dur = real_val(&i.pop()?)? as f32;
         i.push(Value::Signal(Arc::new(stax_dsp::DecaySignal { dur_secs: dur })));
@@ -2719,8 +2578,7 @@ fn install_builtins(i: &mut Interp) {
     reg(i, "grow", |i| {
         let n = real_val(&i.pop()?)? as usize;
         let mut items = collect_to_vec(&i.pop()?)?;
-        if !items.is_empty() && items.len() < n {
-            let last = items.last().unwrap().clone();
+        if let Some(last) = items.last().cloned() {
             while items.len() < n { items.push(last.clone()); }
         }
         i.push(make_list(items));
@@ -2788,19 +2646,15 @@ fn install_builtins(i: &mut Interp) {
         i.push(make_list(vec![v.clone(), v]));
         Ok(())
     });
-    // list spread → distribute elements evenly across [0,1) as a stream of pairs (value, position)
-    // SAPF's spread: n equally-spaced values from a list. We implement as interleaved expand.
-    // For now: alias for reverse (placeholder until semantics are clear)
-    // Actually: spread in SAPF is `n list spread` → n items taken cyclically from list, spread over n positions
+    // spread: identity stub — SAPF semantics not fully resolved yet
     reg(i, "spread", |i| {
         let items = collect_to_vec(&i.pop()?)?;
-        i.push(make_list(items)); // identity for now — full semantics need more context
+        i.push(make_list(items));
         Ok(())
     });
 
     // ---- ZList words (Signal-domain equivalents) ----------------------------
 
-    // natz → 0, 1, 2, ... as Signal (same as ordz but 0-indexed)
     reg(i, "natz", |i| {
         i.push(Value::Signal(Arc::new(stax_core::signal::GenSignal::new(|| {
             let mut n = 0u32;
@@ -2808,7 +2662,6 @@ fn install_builtins(i: &mut Interp) {
         }))));
         Ok(())
     });
-    // n byz → 0, n, 2n, ... as Signal
     reg(i, "byz", |i| {
         let step = real_val(&i.pop()?)? as f32;
         i.push(Value::Signal(Arc::new(stax_core::signal::GenSignal::new(move || {
@@ -2818,7 +2671,6 @@ fn install_builtins(i: &mut Interp) {
         }))));
         Ok(())
     });
-    // start n nbyz → start, start+n, ... as Signal
     reg(i, "nbyz", |i| {
         let step  = real_val(&i.pop()?)? as f32;
         let start = real_val(&i.pop()?)? as f32;
@@ -2829,7 +2681,6 @@ fn install_builtins(i: &mut Interp) {
         }))));
         Ok(())
     });
-    // invz → 1, 1/2, 1/3, ... as Signal
     reg(i, "invz", |i| {
         i.push(Value::Signal(Arc::new(stax_core::signal::GenSignal::new(|| {
             let mut n = 1u32;
@@ -2839,7 +2690,6 @@ fn install_builtins(i: &mut Interp) {
         }))));
         Ok(())
     });
-    // negz → -1, -2, -3, ... as Signal
     reg(i, "negz", |i| {
         i.push(Value::Signal(Arc::new(stax_core::signal::GenSignal::new(|| {
             let mut n = 1u32;
@@ -2849,7 +2699,6 @@ fn install_builtins(i: &mut Interp) {
         }))));
         Ok(())
     });
-    // evenz → 0, 2, 4, ... as Signal
     reg(i, "evenz", |i| {
         i.push(Value::Signal(Arc::new(stax_core::signal::GenSignal::new(|| {
             let mut n = 0u32;
@@ -2859,7 +2708,6 @@ fn install_builtins(i: &mut Interp) {
         }))));
         Ok(())
     });
-    // oddz → 1, 3, 5, ... as Signal
     reg(i, "oddz", |i| {
         i.push(Value::Signal(Arc::new(stax_core::signal::GenSignal::new(|| {
             let mut n = 1u32;
@@ -2872,14 +2720,12 @@ fn install_builtins(i: &mut Interp) {
 
     // ---- Debug / introspection ----------------------------------------------
 
-    // p: print TOS to stderr and leave it on stack
     reg(i, "p", |i| {
         if let Some(v) = i.peek() {
             eprintln!("[stax] {v:?}");
         }
         Ok(())
     });
-    // trace: print entire stack to stderr (does not modify stack)
     reg(i, "trace", |i| {
         eprintln!("[stax] stack ({} items):", i.stack.len());
         for (idx, v) in i.stack.iter().enumerate().rev() {
@@ -2887,14 +2733,12 @@ fn install_builtins(i: &mut Interp) {
         }
         Ok(())
     });
-    // inspect: print type + value of TOS, leave on stack
     reg(i, "inspect", |i| {
         if let Some(v) = i.peek() {
             eprintln!("[stax] {:?} :: {:?}", v, v.kind());
         }
         Ok(())
     });
-    // bench: [fn] bench → calls fn, prints elapsed ms, leaves result
     reg(i, "bench", |i| {
         let f = i.pop()?;
         let t0 = std::time::Instant::now();
@@ -2974,7 +2818,6 @@ fn install_builtins(i: &mut Interp) {
 
     // ---- Signal analysis ----------------------------------------------------
 
-    // signal normalize  → scale to ±1 peak
     reg(i, "normalize", |i| {
         let v = i.pop()?;
         if let Value::Signal(s) = &v {
@@ -2990,7 +2833,6 @@ fn install_builtins(i: &mut Interp) {
         i.push(v);
         Ok(())
     });
-    // signal peak  → max absolute value
     reg(i, "peak", |i| {
         let sig = i.pop()?;
         let samples = collect_signal_f32(&sig)?;
@@ -2998,7 +2840,6 @@ fn install_builtins(i: &mut Interp) {
         i.push(Value::Real(peak as f64));
         Ok(())
     });
-    // signal rms  → root mean square
     reg(i, "rms", |i| {
         let sig = i.pop()?;
         let samples = collect_signal_f32(&sig)?;
@@ -3008,7 +2849,6 @@ fn install_builtins(i: &mut Interp) {
         i.push(Value::Real(rms as f64));
         Ok(())
     });
-    // signal dur  → duration in seconds (len / sample_rate)
     reg(i, "dur", |i| {
         let v = i.pop()?;
         let len = match &v {
@@ -3026,8 +2866,7 @@ fn install_builtins(i: &mut Interp) {
         let n = real_val(&i.pop()?)? as usize;
         let mut seed = i.rng_seed;
         let out: Vec<Value> = (0..n).map(|_| {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            Value::Real((seed >> 33) as f64 / u32::MAX as f64)
+            Value::Real((rng_step(&mut seed) >> 33) as f64 / u32::MAX as f64)
         }).collect();
         i.rng_seed = seed;
         i.push(make_list(out));
@@ -3039,8 +2878,7 @@ fn install_builtins(i: &mut Interp) {
         let n   = real_val(&i.pop()?)? as usize;
         let mut seed = i.rng_seed;
         let out: Vec<Value> = (0..n).map(|_| {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            Value::Real(if max == 0 { 0.0 } else { ((seed >> 33) % max) as f64 })
+            Value::Real(if max == 0 { 0.0 } else { ((rng_step(&mut seed) >> 33) % max) as f64 })
         }).collect();
         i.rng_seed = seed;
         i.push(make_list(out));
@@ -3054,8 +2892,7 @@ fn install_builtins(i: &mut Interp) {
         let len = items.len() as u64;
         let mut seed = i.rng_seed;
         let out: Vec<Value> = (0..n).map(|_| {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            items[((seed >> 33) % len) as usize].clone()
+            items[((rng_step(&mut seed) >> 33) % len) as usize].clone()
         }).collect();
         i.rng_seed = seed;
         i.push(make_list(out));
@@ -3063,13 +2900,12 @@ fn install_builtins(i: &mut Interp) {
     });
     // n prob coins  → n Bernoulli trials (0 or 1); prob in [0,1]
     reg(i, "coins", |i| {
-        let prob  = real_val(&i.pop()?)? as f64;
-        let n     = real_val(&i.pop()?)? as usize;
+        let prob   = real_val(&i.pop()?)? as f64;
+        let n      = real_val(&i.pop()?)? as usize;
         let thresh = (prob * u32::MAX as f64) as u64;
         let mut seed = i.rng_seed;
         let out: Vec<Value> = (0..n).map(|_| {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            Value::Real(if (seed >> 33) < thresh { 1.0 } else { 0.0 })
+            Value::Real(if (rng_step(&mut seed) >> 33) < thresh { 1.0 } else { 0.0 })
         }).collect();
         i.rng_seed = seed;
         i.push(make_list(out));
@@ -3081,14 +2917,14 @@ fn install_builtins(i: &mut Interp) {
     // freq lfnoise0  → stepped random signal
     reg(i, "lfnoise0", |i| {
         let freq = real_val(&i.pop()?)? as f32;
-        let seed = { i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); i.rng_seed };
+        let seed = rng_step(&mut i.rng_seed);
         i.push(Value::Signal(Arc::new(stax_dsp::LfNoise0Signal { freq_hz: freq, seed })));
         Ok(())
     });
     // freq lfnoise1  → linearly interpolated random signal
     reg(i, "lfnoise1", |i| {
         let freq = real_val(&i.pop()?)? as f32;
-        let seed = { i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); i.rng_seed };
+        let seed = rng_step(&mut i.rng_seed);
         i.push(Value::Signal(Arc::new(stax_dsp::LfNoise1Signal { freq_hz: freq, seed })));
         Ok(())
     });
@@ -3108,14 +2944,14 @@ fn install_builtins(i: &mut Interp) {
     // density dust  → random impulse train Signal (avg density in Hz)
     reg(i, "dust", |i| {
         let density = real_val(&i.pop()?)? as f32;
-        let seed = { i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); i.rng_seed };
+        let seed = rng_step(&mut i.rng_seed);
         i.push(Value::Signal(Arc::new(stax_dsp::DustSignal { density_hz: density, seed, bipolar: false })));
         Ok(())
     });
     // density dust2  → bipolar random impulse train Signal (±1)
     reg(i, "dust2", |i| {
         let density = real_val(&i.pop()?)? as f32;
-        let seed = { i.rng_seed = i.rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); i.rng_seed };
+        let seed = rng_step(&mut i.rng_seed);
         i.push(Value::Signal(Arc::new(stax_dsp::DustSignal { density_hz: density, seed, bipolar: true })));
         Ok(())
     });
@@ -3153,10 +2989,7 @@ fn install_builtins(i: &mut Interp) {
     // signal delay_secs delayn  → fixed delay Signal
     reg(i, "delayn", |i| {
         let delay_secs = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::DelayNSignal { input, delay_secs })));
         Ok(())
     });
@@ -3253,20 +3086,14 @@ fn install_builtins(i: &mut Interp) {
     // signal n upSmp  → signal with each sample repeated n times
     reg(i, "upSmp", |i| {
         let factor = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::UpsampleSignal { input, factor: factor.max(1) })));
         Ok(())
     });
     // signal n dwnSmp  → signal taking first of every n input samples
     reg(i, "dwnSmp", |i| {
         let factor = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::DownsampleSignal { input, factor: factor.max(1) })));
         Ok(())
     });
@@ -3278,10 +3105,7 @@ fn install_builtins(i: &mut Interp) {
         let hi_hz  = real_val(&i.pop()?)? as f32;
         let lo_hz  = real_val(&i.pop()?)? as f32;
         let stages = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::DispersalSignal {
             input, stages, lo_hz: lo_hz.max(1.0), hi_hz: hi_hz.max(lo_hz + 1.0),
         })));
@@ -3307,8 +3131,7 @@ fn install_builtins(i: &mut Interp) {
     });
     // ---- Strange attractors -------------------------------------------------
 
-    // sigma rho beta dt x0 y0 z0 lorenz → [x_sig, y_sig, z_sig]
-    // Classic: 10 28 2.667 0.005 0.1 0 0 lorenz  (scale * 0.05 for audio)
+    // Classic Lorenz: 10 28 2.667 0.005 0.1 0 0 lorenz (scale * 0.05 for audio)
     reg(i, "lorenz", |i| {
         let z0    = real_val(&i.pop()?)? as f32;
         let y0    = real_val(&i.pop()?)? as f32;
@@ -3324,8 +3147,7 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // a b c dt x0 y0 z0 rossler → [x_sig, y_sig, z_sig]
-    // Classic: 0.2 0.2 5.7 0.01 0.1 0 0 rossler  (scale * 0.1 for audio)
+    // Classic Rossler: 0.2 0.2 5.7 0.01 0.1 0 0 rossler (scale * 0.1 for audio)
     reg(i, "rossler", |i| {
         let z0 = real_val(&i.pop()?)? as f32;
         let y0 = real_val(&i.pop()?)? as f32;
@@ -3341,8 +3163,7 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // alpha beta delta gamma omega dt x0 v0 duffing → Signal (x channel)
-    // Classic chaotic: -1 1 0.3 0.5 1.2 0.1 0 0 duffing
+    // Classic chaotic Duffing: -1 1 0.3 0.5 1.2 0.1 0 0 duffing
     reg(i, "duffing", |i| {
         let v0    = real_val(&i.pop()?)? as f32;
         let x0    = real_val(&i.pop()?)? as f32;
@@ -3358,8 +3179,7 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // mu dt x0 v0 vanderpol → Signal (x channel)
-    // mu=1 mild, mu=5 relaxation oscillation. x range ≈ ±2.
+    // mu=1 mild, mu=5 relaxation oscillation; x range ≈ ±2
     reg(i, "vanderpol", |i| {
         let v0 = real_val(&i.pop()?)? as f32;
         let x0 = real_val(&i.pop()?)? as f32;
@@ -3371,8 +3191,7 @@ fn install_builtins(i: &mut Interp) {
 
     // ---- Discrete maps (chaotic streams) ------------------------------------
 
-    // r x0 logistic → infinite Stream of Real; x[n+1] = r*x*(1-x)
-    // Chaotic for r in (3.57, 4]. Values stay in [0,1] for x0 in (0,1).
+    // x[n+1] = r*x*(1-x); chaotic for r in (3.57, 4]; values in [0,1] for x0 in (0,1)
     reg(i, "logistic", |i| {
         let x0 = real_val(&i.pop()?)?;
         let r  = real_val(&i.pop()?)?;
@@ -3387,9 +3206,7 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // a b x0 y0 henon → infinite Stream of [x, y] pairs
-    // x[n+1] = 1 - a*x^2 + y,  y[n+1] = b*x
-    // Classic: 1.4 0.3 0 0 henon  (x range ≈ [-1.5, 1.5])
+    // x[n+1] = 1 - a*x² + y, y[n+1] = b*x; classic: 1.4 0.3 0 0 henon (x ≈ [-1.5, 1.5])
     reg(i, "henon", |i| {
         let y0 = real_val(&i.pop()?)?;
         let x0 = real_val(&i.pop()?)?;
@@ -3430,12 +3247,7 @@ fn install_builtins(i: &mut Interp) {
         Ok(())
     });
 
-    // =========================================================================
-    // Tier 1 & 2 DSP additions
-    // =========================================================================
-
     // ---- SVF (State-Variable Filter) ----------------------------------------
-    // signal freq q svflp/svfhp/svfbp/svfnotch → filtered signal
     for (name, mode) in [("svflp", 0u8), ("svfhp", 1u8), ("svfbp", 2u8), ("svfnotch", 3u8)] {
         reg(i, name, move |i| {
             let q = real_val(&i.pop()?)? as f32;
@@ -3450,29 +3262,22 @@ fn install_builtins(i: &mut Interp) {
     }
 
     // ---- Compressor / limiter -----------------------------------------------
-    // signal threshold_db ratio attack release makeup compressor → signal
     reg(i, "compressor", |i| {
         let makeup    = real_val(&i.pop()?)? as f32;
         let release   = real_val(&i.pop()?)? as f32;
         let attack    = real_val(&i.pop()?)? as f32;
         let ratio     = real_val(&i.pop()?)? as f32;
         let threshold = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::CompressorSignal {
             input, threshold_db: threshold, ratio, attack_secs: attack, release_secs: release, makeup_db: makeup,
         })));
         Ok(())
     });
-    // signal threshold limiter → signal  (ratio=∞, minimal attack)
+    // ratio=∞, minimal attack
     reg(i, "limiter", |i| {
         let threshold = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::CompressorSignal {
             input, threshold_db: threshold, ratio: 10000.0, attack_secs: 0.001, release_secs: 0.1, makeup_db: 0.0,
         })));
@@ -3480,7 +3285,6 @@ fn install_builtins(i: &mut Interp) {
     });
 
     // ---- Window functions ---------------------------------------------------
-    // n hann / hamming / blackman / blackmanharris / nuttall / flattop → VecSignal
     for (name, wfn) in [
         ("hann",            stax_dsp::hann_window            as fn(usize) -> Vec<f32>),
         ("hamming",         stax_dsp::hamming_window),
@@ -3495,14 +3299,12 @@ fn install_builtins(i: &mut Interp) {
             Ok(())
         });
     }
-    // n sigma gaussian → VecSignal
     reg(i, "gaussian", |i| {
         let sigma = real_val(&i.pop()?)?;
         let n = real_val(&i.pop()?)? as usize;
         i.push(Value::Signal(Arc::new(VecSignal(stax_dsp::gaussian_window(n, sigma)))));
         Ok(())
     });
-    // n beta kaiser → VecSignal
     reg(i, "kaiser", |i| {
         let beta = real_val(&i.pop()?)?;
         let n = real_val(&i.pop()?)? as usize;
@@ -3511,71 +3313,50 @@ fn install_builtins(i: &mut Interp) {
     });
 
     // ---- Hilbert transform --------------------------------------------------
-    // signal hilbert → 90°-shifted signal
     reg(i, "hilbert", |i| {
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::HilbertFilter { input })));
         Ok(())
     });
 
     // ---- Windowed-sinc FIR design -------------------------------------------
-    // signal cutoff_hz n_taps firlp → filtered signal
     reg(i, "firlp", |i| {
         let n_taps = real_val(&i.pop()?)? as usize;
         let cutoff = real_val(&i.pop()?)?;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input  = pop_signal(i)?;
         let coeffs = stax_dsp::fir_coeffs_lp(cutoff, i.sample_rate, n_taps);
         i.push(Value::Signal(Arc::new(stax_dsp::FirFilterSignal { input, coeffs })));
         Ok(())
     });
-    // signal cutoff_hz n_taps firhp → filtered signal
     reg(i, "firhp", |i| {
         let n_taps = real_val(&i.pop()?)? as usize;
         let cutoff = real_val(&i.pop()?)?;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input  = pop_signal(i)?;
         let coeffs = stax_dsp::fir_coeffs_hp(cutoff, i.sample_rate, n_taps);
         i.push(Value::Signal(Arc::new(stax_dsp::FirFilterSignal { input, coeffs })));
         Ok(())
     });
-    // signal lo_hz hi_hz n_taps firbp → filtered signal
     reg(i, "firbp", |i| {
         let n_taps = real_val(&i.pop()?)? as usize;
         let hi_hz  = real_val(&i.pop()?)?;
         let lo_hz  = real_val(&i.pop()?)?;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input  = pop_signal(i)?;
         let coeffs = stax_dsp::fir_coeffs_bp(lo_hz, hi_hz, i.sample_rate, n_taps);
         i.push(Value::Signal(Arc::new(stax_dsp::FirFilterSignal { input, coeffs })));
         Ok(())
     });
 
-    // ---- FDN Reverb ---------------------------------------------------------
-    // signal n_lines decay_secs room_size verb → signal
+    // ---- FDN Reverb (Jot/Hadamard) ------------------------------------------
     reg(i, "verb", |i| {
         let room  = real_val(&i.pop()?)? as f32;
         let decay = real_val(&i.pop()?)? as f32;
         let n     = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::FdnReverb { input, n_lines: n, decay_secs: decay, room_size: room })));
         Ok(())
     });
 
     // ---- Waveshaping --------------------------------------------------------
-    // signal amount tanhsat / softclip / hardclip / cubicsat / atansat → signal
     for (name, mode) in [
         ("tanhsat",  stax_dsp::WaveShapeMode::Tanh),
         ("softclip", stax_dsp::WaveShapeMode::SoftClip),
@@ -3597,10 +3378,7 @@ fn install_builtins(i: &mut Interp) {
     reg(i, "chebdist", |i| {
         let amount = real_val(&i.pop()?)? as f32;
         let order  = real_val(&i.pop()?)? as u8;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input  = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::WaveShaperSignal {
             input, mode: stax_dsp::WaveShapeMode::Chebyshev(order), amount,
         })));
@@ -3608,30 +3386,22 @@ fn install_builtins(i: &mut Interp) {
     });
 
     // ---- Phase vocoder (offline) --------------------------------------------
-    // signal fft_size hop stretch pvocstretch → VecSignal
     reg(i, "pvocstretch", |i| {
         let stretch  = real_val(&i.pop()?)? as f32;
         let hop      = real_val(&i.pop()?)? as usize;
         let fft_size = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input    = pop_signal(i)?;
         let sr = i.sample_rate;
         let samples = collect_signal_f32_sr(&input, sr)?;
         let out = stax_dsp::pvoc_stretch(&samples, fft_size, hop, stretch);
         i.push(Value::Signal(Arc::new(VecSignal(out))));
         Ok(())
     });
-    // signal fft_size hop semitones pvocp → VecSignal (pitch-shifted)
     reg(i, "pvocp", |i| {
         let semitones = real_val(&i.pop()?)? as f32;
         let hop       = real_val(&i.pop()?)? as usize;
         let fft_size  = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input     = pop_signal(i)?;
         let sr = i.sample_rate;
         let samples = collect_signal_f32_sr(&input, sr)?;
         let out = stax_dsp::pvoc_pitch(&samples, fft_size, hop, semitones);
@@ -3640,7 +3410,6 @@ fn install_builtins(i: &mut Interp) {
     });
 
     // ---- Granular synthesis -------------------------------------------------
-    // signal dur density pos pos_spread pitch pitch_spread grain → signal
     reg(i, "grain", |i| {
         let pitch_spread = real_val(&i.pop()?)? as f32;
         let pitch        = real_val(&i.pop()?)? as f32;
@@ -3648,10 +3417,7 @@ fn install_builtins(i: &mut Interp) {
         let pos          = real_val(&i.pop()?)? as f32;
         let density      = real_val(&i.pop()?)? as f32;
         let dur          = real_val(&i.pop()?)? as f32;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input        = pop_signal(i)?;
         let sr   = i.sample_rate;
         let seed = i.rng_seed;
         i.rng_seed = i.rng_seed.wrapping_add(1);
@@ -3665,31 +3431,20 @@ fn install_builtins(i: &mut Interp) {
     });
 
     // ---- LPC analysis / synthesis -------------------------------------------
-    // signal order lpcanalz → VecSignal (coefficients)
     reg(i, "lpcanalz", |i| {
         let order = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         let sr = i.sample_rate;
         let samples = collect_signal_f32_sr(&input, sr)?;
         let coeffs = stax_dsp::lpc_analyze(&samples, order);
         i.push(Value::Signal(Arc::new(VecSignal(coeffs))));
         Ok(())
     });
-    // excitation coefficients lpcsynth → VecSignal
     reg(i, "lpcsynth", |i| {
-        let coeffs_sig = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        let exc_sig = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let coeffs_sig = pop_signal(i)?;
+        let exc_sig    = pop_signal(i)?;
         let sr = i.sample_rate;
-        let coeffs = collect_signal_f32_sr(&coeffs_sig, sr)?;
+        let coeffs     = collect_signal_f32_sr(&coeffs_sig, sr)?;
         let excitation = collect_signal_f32_sr(&exc_sig, sr)?;
         let out = stax_dsp::lpc_synthesize(&excitation, &coeffs);
         i.push(Value::Signal(Arc::new(VecSignal(out))));
@@ -3697,25 +3452,17 @@ fn install_builtins(i: &mut Interp) {
     });
 
     // ---- Goertzel -----------------------------------------------------------
-    // signal freq_hz goertzel → Real magnitude
     reg(i, "goertzel", |i| {
         let freq  = real_val(&i.pop()?)?;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         let sr = i.sample_rate;
         let samples = collect_signal_f32_sr(&input, sr)?;
         i.push(Value::Real(stax_dsp::goertzel_magnitude(&samples, freq, sr) as f64));
         Ok(())
     });
-    // signal freq_hz goertzelc → [re, im] stream
     reg(i, "goertzelc", |i| {
         let freq  = real_val(&i.pop()?)?;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         let sr = i.sample_rate;
         let samples = collect_signal_f32_sr(&input, sr)?;
         let (re, im) = stax_dsp::goertzel_complex(&samples, freq, sr);
@@ -3726,22 +3473,16 @@ fn install_builtins(i: &mut Interp) {
     // ---- MDCT / IMDCT -------------------------------------------------------
     // signal mdct → VecSignal (N/2 coefficients)
     reg(i, "mdct", |i| {
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        let sr = i.sample_rate;
+        let input   = pop_signal(i)?;
+        let sr      = i.sample_rate;
         let samples = collect_signal_f32_sr(&input, sr)?;
         i.push(Value::Signal(Arc::new(VecSignal(stax_dsp::mdct(&samples)))));
         Ok(())
     });
     // signal imdct → VecSignal (2N samples)
     reg(i, "imdct", |i| {
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        let sr = i.sample_rate;
+        let input  = pop_signal(i)?;
+        let sr     = i.sample_rate;
         let coeffs = collect_signal_f32_sr(&input, sr)?;
         i.push(Value::Signal(Arc::new(VecSignal(stax_dsp::imdct(&coeffs)))));
         Ok(())
@@ -3752,10 +3493,7 @@ fn install_builtins(i: &mut Interp) {
     reg(i, "thiran", |i| {
         let order = real_val(&i.pop()?)? as usize;
         let delay = real_val(&i.pop()?)?;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let input = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::ThiranAllpass { input, delay_samples: delay, order })));
         Ok(())
     });
@@ -3764,14 +3502,8 @@ fn install_builtins(i: &mut Interp) {
     // signal delay_signal max_delay_secs farrow → signal
     reg(i, "farrow", |i| {
         let max_delay = real_val(&i.pop()?)? as f32;
-        let delay_sig = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
+        let delay_sig = pop_signal(i)?;
+        let input     = pop_signal(i)?;
         i.push(Value::Signal(Arc::new(stax_dsp::FarrowDelay { input, delay_signal: delay_sig, max_delay_secs: max_delay })));
         Ok(())
     });
@@ -3779,16 +3511,13 @@ fn install_builtins(i: &mut Interp) {
     // ---- CQT ----------------------------------------------------------------
     // signal bpo f_min n_bins cqt → VecSignal of magnitudes
     reg(i, "cqt", |i| {
-        let n_bins = real_val(&i.pop()?)? as usize;
-        let f_min  = real_val(&i.pop()?)?;
-        let bpo    = real_val(&i.pop()?)? as usize;
-        let input = match i.pop()? {
-            Value::Signal(s) => s,
-            other => return Err(Error::Type { expected: "Signal", actual: other.kind().name() }),
-        };
-        let sr = i.sample_rate;
+        let n_bins  = real_val(&i.pop()?)? as usize;
+        let f_min   = real_val(&i.pop()?)?;
+        let bpo     = real_val(&i.pop()?)? as usize;
+        let input   = pop_signal(i)?;
+        let sr      = i.sample_rate;
         let samples = collect_signal_f32_sr(&input, sr)?;
-        let mags = stax_dsp::cqt_magnitudes(&samples, sr, bpo, f_min, n_bins);
+        let mags    = stax_dsp::cqt_magnitudes(&samples, sr, bpo, f_min, n_bins);
         i.push(Value::Signal(Arc::new(VecSignal(mags))));
         Ok(())
     });
@@ -4522,10 +4251,6 @@ mod tests {
         assert_eq!(pair0[0].as_real().unwrap(), 0.0);
         assert_eq!(pair0[1].as_real().unwrap(), 0.0);
     }
-
-    // =========================================================================
-    // Tier 1 & 2 DSP tests
-    // =========================================================================
 
     fn fill_signal(sig: &Arc<dyn stax_core::Signal>, n: usize) -> Vec<f32> {
         let mut inst = sig.instantiate(48000.0);

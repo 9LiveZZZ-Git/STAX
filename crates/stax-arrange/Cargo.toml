@@ -9,4 +9,3 @@ license.workspace = true
 
 [dependencies]
 stax-core = { workspace = true }
-stax-eval = { workspace = true }

@@ -125,14 +125,14 @@ impl Parser {
             }
 
             // . form-apply
-            Some('.') if self.peek2().map_or(false, is_word_start) => {
+            Some('.') if self.peek2().is_some_and(is_word_start) => {
                 self.advance();
                 let name = self.read_word();
                 Ok(vec![Op::FormApply(Arc::from(name.as_str()))])
             }
 
             // = bind
-            Some('=') if self.peek2().map_or(false, |c| c != '=') => {
+            Some('=') if self.peek2().is_some_and(|c| c != '=') => {
                 self.advance();
                 self.skip_ws();
                 match self.peek() {
@@ -168,7 +168,7 @@ impl Parser {
             }
 
             // Negative number
-            Some('-') if self.peek2().map_or(false, |c| c.is_ascii_digit()) => {
+            Some('-') if self.peek2().is_some_and(|c| c.is_ascii_digit()) => {
                 let n = self.parse_number()?;
                 Ok(vec![Op::Lit(Value::Real(n))])
             }
@@ -311,14 +311,14 @@ impl Parser {
             self.advance();
         }
 
-        while self.peek().map_or(false, |c| c.is_ascii_digit()) {
+        while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             s.push(self.advance().unwrap());
         }
 
         // Decimal part
-        if self.peek() == Some('.') && self.peek2().map_or(false, |c| c.is_ascii_digit()) {
+        if self.peek() == Some('.') && self.peek2().is_some_and(|c| c.is_ascii_digit()) {
             s.push(self.advance().unwrap()); // '.'
-            while self.peek().map_or(false, |c| c.is_ascii_digit()) {
+            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
                 s.push(self.advance().unwrap());
             }
         }
@@ -329,7 +329,7 @@ impl Parser {
             if matches!(self.peek(), Some('+') | Some('-')) {
                 s.push(self.advance().unwrap());
             }
-            while self.peek().map_or(false, |c| c.is_ascii_digit()) {
+            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
                 s.push(self.advance().unwrap());
             }
         }
@@ -337,10 +337,10 @@ impl Parser {
         let base: f64 = s.parse().map_err(|_| self.parse_err(format!("bad number: {s}")))?;
 
         // Infix fraction: base/denom (no whitespace)
-        if self.peek() == Some('/') && self.peek2().map_or(false, |c| c.is_ascii_digit()) {
+        if self.peek() == Some('/') && self.peek2().is_some_and(|c| c.is_ascii_digit()) {
             self.advance(); // '/'
             let mut denom = String::new();
-            while self.peek().map_or(false, |c| c.is_ascii_digit()) {
+            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
                 denom.push(self.advance().unwrap());
             }
             let d: f64 = denom.parse().unwrap();
@@ -350,7 +350,7 @@ impl Parser {
         // Suffix (look ahead, only absorb if known)
         let suffix_start = self.pos;
         let mut suffix = String::new();
-        while self.peek().map_or(false, |c| c.is_ascii_alphabetic()) {
+        while self.peek().is_some_and(|c| c.is_ascii_alphabetic()) {
             suffix.push(self.advance().unwrap());
             if matches!(suffix.as_str(), "k" | "M" | "m" | "u" | "pi" | "h" | "sr") {
                 break;
@@ -382,7 +382,7 @@ impl Parser {
 
     fn read_word(&mut self) -> String {
         let mut s = String::new();
-        while self.peek().map_or(false, |c| is_word_char(c)) {
+        while self.peek().is_some_and(is_word_char) {
             s.push(self.advance().unwrap());
         }
         s

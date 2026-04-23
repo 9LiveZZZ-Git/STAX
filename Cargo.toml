@@ -44,7 +44,6 @@ num-complex = "0.4"
 
 # M3 — audio
 cpal   = "0.15"
-wide   = "0.7"
 
 # M3 — FFT / spectrograms
 realfft = "3"

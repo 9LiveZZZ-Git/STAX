@@ -11,6 +11,13 @@ use stax_core::{Signal, SignalInstance};
 
 pub use stax_core::signal::{BinarySignal, ConstSignal, UnarySignal};
 
+// ---- type aliases -----------------------------------------------------------
+
+/// A frequency in Hertz. Alias for f32 — no call-site changes required.
+pub type Hz = f32;
+/// A time in seconds. Alias for f32 — no call-site changes required.
+pub type Secs = f32;
+
 // ---- helpers ----------------------------------------------------------------
 
 #[inline(always)]
@@ -21,6 +28,17 @@ fn lcg_next(seed: &mut u64) -> f32 {
     // (Bug was `>> 33` which only uses 31 bits, capping the ratio at ~0.5
     //  and biasing the output to [-1, 0) with mean ≈ -0.5.)
     (*seed >> 32) as f32 / (u32::MAX as f32) * 2.0 - 1.0
+}
+
+/// Compute the one-pole lag coefficient from a lag time in seconds.
+/// Returns 0 for non-positive lag times (immediate tracking).
+#[inline]
+fn lag_coeff(lag_time: Secs, sr: f64) -> f32 {
+    if lag_time <= 0.0 {
+        0.0f32
+    } else {
+        (-1.0 / (lag_time as f64 * sr)).exp() as f32
+    }
 }
 
 // ---- SinOsc -----------------------------------------------------------------
@@ -491,27 +509,33 @@ impl SignalInstance for ImpulseInstance {
 
 // ---- Filter infrastructure --------------------------------------------------
 
-/// RBJ cookbook LP filter coefficients.
-fn rbj_lpf(fc: f64, sr: f64, q: f64) -> (f64, f64, f64, f64, f64) {
+/// Shared computation for RBJ cookbook biquad designs.
+/// Returns `(cos_w0, alpha, a0)` — the three values that differ only in
+/// how b0/b1/b2 are assembled for LP vs HP.
+#[inline]
+fn rbj_common(fc: f64, sr: f64, q: f64) -> (f64, f64, f64) {
     let w0 = std::f64::consts::TAU * fc / sr;
     let cos_w0 = w0.cos();
     let alpha = w0.sin() / (2.0 * q);
+    let a0 = 1.0 + alpha;
+    (cos_w0, alpha, a0)
+}
+
+/// RBJ cookbook LP filter coefficients: (b0, b1, b2, a1, a2) normalised by a0.
+fn rbj_lpf(fc: f64, sr: f64, q: f64) -> (f64, f64, f64, f64, f64) {
+    let (cos_w0, alpha, a0) = rbj_common(fc, sr, q);
     let b0 = (1.0 - cos_w0) / 2.0;
     let b1 = 1.0 - cos_w0;
     let b2 = b0;
-    let a0 = 1.0 + alpha;
     (b0/a0, b1/a0, b2/a0, -2.0*cos_w0/a0, (1.0-alpha)/a0)
 }
 
-/// RBJ cookbook HP filter coefficients.
+/// RBJ cookbook HP filter coefficients: (b0, b1, b2, a1, a2) normalised by a0.
 fn rbj_hpf(fc: f64, sr: f64, q: f64) -> (f64, f64, f64, f64, f64) {
-    let w0 = std::f64::consts::TAU * fc / sr;
-    let cos_w0 = w0.cos();
-    let alpha = w0.sin() / (2.0 * q);
+    let (cos_w0, alpha, a0) = rbj_common(fc, sr, q);
     let b0 = (1.0 + cos_w0) / 2.0;
     let b1 = -(1.0 + cos_w0);
     let b2 = b0;
-    let a0 = 1.0 + alpha;
     (b0/a0, b1/a0, b2/a0, -2.0*cos_w0/a0, (1.0-alpha)/a0)
 }
 
@@ -678,11 +702,7 @@ pub struct LagSignal {
 
 impl Signal for LagSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
-        let coeff = if self.lag_time <= 0.0 {
-            0.0f32
-        } else {
-            (-1.0 / (self.lag_time as f64 * sr)).exp() as f32
-        };
+        let coeff = lag_coeff(self.lag_time, sr);
         Box::new(LagInstance { input: self.input.instantiate(sr), coeff, y: 0.0 })
     }
 }
@@ -708,11 +728,7 @@ pub struct Lag2Signal {
 
 impl Signal for Lag2Signal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
-        let coeff = if self.lag_time <= 0.0 {
-            0.0f32
-        } else {
-            (-1.0 / (self.lag_time as f64 * sr)).exp() as f32
-        };
+        let coeff = lag_coeff(self.lag_time, sr);
         Box::new(Lag2Instance { input: self.input.instantiate(sr), coeff, y1: 0.0, y2: 0.0 })
     }
 }
@@ -1236,6 +1252,41 @@ impl SignalInstance for DispersalInstance {
 // dt is the virtual time step per audio sample.
 // Audio-rate chaos: dt ≈ 0.005–0.01. LFO-rate: dt ≈ 0.0005–0.002.
 
+/// One RK4 step for a 3-state autonomous ODE  d(x,y,z)/dt = f(x,y,z).
+/// Returns the updated `(x, y, z)` after advancing by `dt`.
+#[inline]
+fn rk4_3d<F>(x: f32, y: f32, z: f32, dt: f32, f: F) -> (f32, f32, f32)
+where
+    F: Fn(f32, f32, f32) -> (f32, f32, f32),
+{
+    let (k1x, k1y, k1z) = f(x, y, z);
+    let (k2x, k2y, k2z) = f(x + 0.5*dt*k1x, y + 0.5*dt*k1y, z + 0.5*dt*k1z);
+    let (k3x, k3y, k3z) = f(x + 0.5*dt*k2x, y + 0.5*dt*k2y, z + 0.5*dt*k2z);
+    let (k4x, k4y, k4z) = f(x + dt*k3x,     y + dt*k3y,     z + dt*k3z);
+    (
+        x + dt/6.0 * (k1x + 2.0*k2x + 2.0*k3x + k4x),
+        y + dt/6.0 * (k1y + 2.0*k2y + 2.0*k3y + k4y),
+        z + dt/6.0 * (k1z + 2.0*k2z + 2.0*k3z + k4z),
+    )
+}
+
+/// One RK4 step for a 2-state ODE  d(x,v)/dt = f(x,v).
+/// Returns the updated `(x, v)` after advancing by `dt`.
+#[inline]
+fn rk4_2d<F>(x: f32, v: f32, dt: f32, f: F) -> (f32, f32)
+where
+    F: Fn(f32, f32) -> (f32, f32),
+{
+    let (k1x, k1v) = f(x, v);
+    let (k2x, k2v) = f(x + 0.5*dt*k1x, v + 0.5*dt*k1v);
+    let (k3x, k3v) = f(x + 0.5*dt*k2x, v + 0.5*dt*k2v);
+    let (k4x, k4v) = f(x + dt*k3x,     v + dt*k3v);
+    (
+        x + dt/6.0 * (k1x + 2.0*k2x + 2.0*k3x + k4x),
+        v + dt/6.0 * (k1v + 2.0*k2v + 2.0*k3v + k4v),
+    )
+}
+
 // Lorenz: dx/dt = sigma*(y-x), dy/dt = x*(rho-z)-y, dz/dt = x*y-beta*z
 // Classic: sigma=10, rho=28, beta=2.667, dt=0.005. x/y range ≈ ±20, z ∈ [0,50].
 pub struct LorenzSignal {
@@ -1259,18 +1310,11 @@ struct LorenzInstance { sigma: f32, rho: f32, beta: f32, dt: f32, x: f32, y: f32
 impl SignalInstance for LorenzInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let (sigma, rho, beta, dt) = (self.sigma, self.rho, self.beta, self.dt);
-        let ld = |x: f32, y: f32, z: f32| -> (f32, f32, f32) {
-            (sigma*(y-x), x*(rho-z)-y, x*y-beta*z)
-        };
         for s in out.iter_mut() {
             *s = match self.output { 0 => self.x, 1 => self.y, _ => self.z };
-            let (k1x,k1y,k1z) = ld(self.x, self.y, self.z);
-            let (k2x,k2y,k2z) = ld(self.x+0.5*dt*k1x, self.y+0.5*dt*k1y, self.z+0.5*dt*k1z);
-            let (k3x,k3y,k3z) = ld(self.x+0.5*dt*k2x, self.y+0.5*dt*k2y, self.z+0.5*dt*k2z);
-            let (k4x,k4y,k4z) = ld(self.x+dt*k3x, self.y+dt*k3y, self.z+dt*k3z);
-            self.x += dt/6.0*(k1x+2.0*k2x+2.0*k3x+k4x);
-            self.y += dt/6.0*(k1y+2.0*k2y+2.0*k3y+k4y);
-            self.z += dt/6.0*(k1z+2.0*k2z+2.0*k3z+k4z);
+            (self.x, self.y, self.z) = rk4_3d(self.x, self.y, self.z, dt, |x, y, z| {
+                (sigma*(y-x), x*(rho-z)-y, x*y-beta*z)
+            });
         }
     }
 }
@@ -1298,18 +1342,11 @@ struct RosslerInstance { a: f32, b: f32, c: f32, dt: f32, x: f32, y: f32, z: f32
 impl SignalInstance for RosslerInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let (a, b, c, dt) = (self.a, self.b, self.c, self.dt);
-        let rd = |x: f32, y: f32, z: f32| -> (f32, f32, f32) {
-            (-(y+z), x+a*y, b+z*(x-c))
-        };
         for s in out.iter_mut() {
             *s = match self.output { 0 => self.x, 1 => self.y, _ => self.z };
-            let (k1x,k1y,k1z) = rd(self.x, self.y, self.z);
-            let (k2x,k2y,k2z) = rd(self.x+0.5*dt*k1x, self.y+0.5*dt*k1y, self.z+0.5*dt*k1z);
-            let (k3x,k3y,k3z) = rd(self.x+0.5*dt*k2x, self.y+0.5*dt*k2y, self.z+0.5*dt*k2z);
-            let (k4x,k4y,k4z) = rd(self.x+dt*k3x, self.y+dt*k3y, self.z+dt*k3z);
-            self.x += dt/6.0*(k1x+2.0*k2x+2.0*k3x+k4x);
-            self.y += dt/6.0*(k1y+2.0*k2y+2.0*k3y+k4y);
-            self.z += dt/6.0*(k1z+2.0*k2z+2.0*k3z+k4z);
+            (self.x, self.y, self.z) = rk4_3d(self.x, self.y, self.z, dt, |x, y, z| {
+                (-(y+z), x+a*y, b+z*(x-c))
+            });
         }
     }
 }
@@ -1344,17 +1381,20 @@ impl SignalInstance for DuffingInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let (alpha, beta, delta, gamma, omega, dt) =
             (self.alpha, self.beta, self.delta, self.gamma, self.omega, self.dt);
-        let f = |x: f32, v: f32, t: f32| -> (f32, f32) {
-            (v, -delta*v - alpha*x - beta*x*x*x + gamma*(omega*t).cos())
-        };
+        // Duffing is non-autonomous: forcing term depends on t, so each RK4
+        // sub-step must use the correct sub-step time.
         for s in out.iter_mut() {
             *s = self.x;
-            let (k1x, k1v) = f(self.x, self.v, self.t);
-            let (k2x, k2v) = f(self.x+0.5*dt*k1x, self.v+0.5*dt*k1v, self.t+0.5*dt);
-            let (k3x, k3v) = f(self.x+0.5*dt*k2x, self.v+0.5*dt*k2v, self.t+0.5*dt);
-            let (k4x, k4v) = f(self.x+dt*k3x, self.v+dt*k3v, self.t+dt);
-            self.x += dt/6.0*(k1x+2.0*k2x+2.0*k3x+k4x);
-            self.v += dt/6.0*(k1v+2.0*k2v+2.0*k3v+k4v);
+            let t = self.t;
+            let f = |x: f32, v: f32, t_sub: f32| -> (f32, f32) {
+                (v, -delta*v - alpha*x - beta*x*x*x + gamma*(omega*t_sub).cos())
+            };
+            let (k1x, k1v) = f(self.x, self.v, t);
+            let (k2x, k2v) = f(self.x + 0.5*dt*k1x, self.v + 0.5*dt*k1v, t + 0.5*dt);
+            let (k3x, k3v) = f(self.x + 0.5*dt*k2x, self.v + 0.5*dt*k2v, t + 0.5*dt);
+            let (k4x, k4v) = f(self.x + dt*k3x,     self.v + dt*k3v,     t + dt);
+            self.x += dt/6.0 * (k1x + 2.0*k2x + 2.0*k3x + k4x);
+            self.v += dt/6.0 * (k1v + 2.0*k2v + 2.0*k3v + k4v);
             self.t += dt;
         }
     }
@@ -1380,15 +1420,11 @@ struct VanDerPolInstance { mu: f32, dt: f32, x: f32, v: f32 }
 impl SignalInstance for VanDerPolInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let (mu, dt) = (self.mu, self.dt);
-        let f = |x: f32, v: f32| -> (f32, f32) { (v, mu*(1.0-x*x)*v - x) };
         for s in out.iter_mut() {
             *s = self.x;
-            let (k1x, k1v) = f(self.x, self.v);
-            let (k2x, k2v) = f(self.x+0.5*dt*k1x, self.v+0.5*dt*k1v);
-            let (k3x, k3v) = f(self.x+0.5*dt*k2x, self.v+0.5*dt*k2v);
-            let (k4x, k4v) = f(self.x+dt*k3x, self.v+dt*k3v);
-            self.x += dt/6.0*(k1x+2.0*k2x+2.0*k3x+k4x);
-            self.v += dt/6.0*(k1v+2.0*k2v+2.0*k3v+k4v);
+            (self.x, self.v) = rk4_2d(self.x, self.v, dt, |x, v| {
+                (v, mu*(1.0 - x*x)*v - x)
+            });
         }
     }
 }
@@ -1699,7 +1735,7 @@ impl Signal for FdnReverb {
         let delays: Vec<usize> = base_ms[..n].iter()
             .map(|&ms| ((ms * self.room_size * sr as f32 / 1000.0).round() as usize).max(2))
             .collect();
-        let max_d = *delays.iter().max().unwrap();
+        let max_d = delays.iter().copied().max().unwrap_or(2);
         let g: Vec<f32> = delays.iter().map(|&d| {
             if self.decay_secs > 0.0 { 10.0_f32.powf(-3.0*d as f32 / (sr as f32*self.decay_secs)) } else { 0.0 }
         }).collect();
@@ -1965,9 +2001,9 @@ pub fn lpc_synthesize(excitation: &[f32], coeffs: &[f32]) -> Vec<f32> {
 
 // ---- Goertzel (single-frequency DFT) ----------------------------------------
 
-pub fn goertzel_magnitude(samples: &[f32], freq_hz: f64, sr: f64) -> f32 {
-    let n = samples.len();
-    if n == 0 { return 0.0; }
+/// Inner Goertzel loop. Returns `(s1, s2, omega, n)` for the caller to finalise.
+#[inline]
+fn goertzel_run(samples: &[f32], freq_hz: f64, sr: f64) -> (f64, f64, f64, usize) {
     let omega = std::f64::consts::TAU * freq_hz / sr;
     let coeff = 2.0 * omega.cos();
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
@@ -1975,23 +2011,22 @@ pub fn goertzel_magnitude(samples: &[f32], freq_hz: f64, sr: f64) -> f32 {
         let s0 = coeff * s1 - s2 + x as f64;
         s2 = s1; s1 = s0;
     }
+    (s1, s2, omega, samples.len())
+}
+
+pub fn goertzel_magnitude(samples: &[f32], freq_hz: f64, sr: f64) -> f32 {
+    if samples.is_empty() { return 0.0; }
+    let (s1, s2, omega, n) = goertzel_run(samples, freq_hz, sr);
     let re = s1 - s2 * omega.cos();
     let im = s2 * omega.sin();
     ((re*re + im*im).sqrt() / n as f64) as f32
 }
 
 pub fn goertzel_complex(samples: &[f32], freq_hz: f64, sr: f64) -> (f32, f32) {
-    let n = samples.len();
-    if n == 0 { return (0.0, 0.0); }
-    let omega = std::f64::consts::TAU * freq_hz / sr;
-    let coeff = 2.0 * omega.cos();
-    let (mut s1, mut s2) = (0.0f64, 0.0f64);
-    for &x in samples {
-        let s0 = coeff * s1 - s2 + x as f64;
-        s2 = s1; s1 = s0;
-    }
-    ((( s1 - s2*omega.cos()) / n as f64) as f32,
-     ((s2 * omega.sin()) / n as f64) as f32)
+    if samples.is_empty() { return (0.0, 0.0); }
+    let (s1, s2, omega, n) = goertzel_run(samples, freq_hz, sr);
+    (((s1 - s2*omega.cos()) / n as f64) as f32,
+     ((s2 * omega.sin())    / n as f64) as f32)
 }
 
 // ---- MDCT / IMDCT -----------------------------------------------------------

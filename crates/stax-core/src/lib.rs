@@ -18,8 +18,8 @@ pub mod value;
 
 pub use error::{Error, Result};
 pub use form::Form;
-pub use function::Function;
-pub use op::Op;
+pub use function::{Function, FunctionBody};
+pub use op::{Adverb, Op};
 pub use signal::{Signal, SignalInstance};
 pub use stream::{Stream, StreamIter};
 pub use value::{Value, ValueKind};

@@ -767,7 +767,6 @@ name = "stax-arrange"
 version = "0.1.0"
 dependencies = [
  "stax-core",
- "stax-eval",
 ]
 
 [[package]]
@@ -777,7 +776,6 @@ dependencies = [
  "anyhow",
  "cpal",
  "stax-core",
- "stax-dsp",
 ]
 
 [[package]]
@@ -801,7 +799,6 @@ name = "stax-editor"
 version = "0.1.0"
 dependencies = [
  "stax-core",
- "stax-eval",
 ]
 
 [[package]]
@@ -813,7 +810,6 @@ dependencies = [
  "stax-dsp",
  "stax-io",
  "stax-parser",
- "thiserror",
 ]
 
 [[package]]
@@ -860,9 +856,7 @@ dependencies = [
 name = "stax-plugin"
 version = "0.1.0"
 dependencies = [
- "stax-audio",
  "stax-core",
- "stax-eval",
 ]
 
 [[package]]
