@@ -4,8 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# M4: graph IR, typed ports, bidirectional Op <-> graph round-trip.
-# Dependencies are added at M4; this crate is scaffold-only for M0.
-
 [dependencies]
 stax-core = { workspace = true }
+
+[dev-dependencies]
+stax-parser = { workspace = true }
+stax-eval   = { workspace = true }

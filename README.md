@@ -48,7 +48,7 @@ stax is a faithful Rust port of the SAPF language (passes all 365 of McCartney's
 | **M1** | Full interpreter core — 365/365 SAPF unit tests | ✅ |
 | **M2** | Rank-polymorphic dispatch, `@`/`@@`/`@@@`, outer products, deterministic seeds | ✅ |
 | **M3** | Audio runtime (cpal), MIDI/OSC, full DSP suite, Tier 1/2 extended DSP | ✅ |
-| **M4** | Graph IR + text↔graph round-trip (`stax-graph`) | 🔲 |
+| **M4** | Graph IR + text↔graph round-trip (`stax-graph`) | ✅ |
 | **M5** | egui editor: text, graph, function-port views | 🔲 |
 | **M6** | WASM / AudioWorklet browser target | 🔲 |
 | **M7** | Arrangement, clips, automation | 🔲 |
@@ -56,7 +56,7 @@ stax is a faithful Rust port of the SAPF language (passes all 365 of McCartney's
 | **M9** | GPU operators | 🔲 |
 | **M10** | JIT-compiled signal paths | 🔲 |
 
-**Current test counts:** 94 unit tests + 6 DSP tests + 365/365 SAPF integration = **100 passing**.
+**Current test counts:** 94 unit tests + 6 DSP tests + 365/365 SAPF integration + 36 graph tests = **136 passing**.
 
 ---
 
@@ -145,7 +145,7 @@ The single `Vec<Op>` IR is what makes lossless text↔graph round-tripping possi
 | `stax-dsp` | oscillators, filters, attractors, full DSP suite | ✅ |
 | `stax-audio` | cpal native runtime + WASM stub | ✅ |
 | `stax-io` | MIDI out (midir) + OSC (rosc) | ✅ |
-| `stax-graph` | graph IR + round-trip | M4 |
+| `stax-graph` | graph IR + round-trip | ✅ |
 | `stax-editor` | egui node editor | M5 |
 | `stax-arrange` | transport, clips, automation | M7 |
 | `stax-plugin` | VST/AU target | M8 |

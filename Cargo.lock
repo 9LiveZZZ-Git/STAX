@@ -828,6 +828,8 @@ name = "stax-graph"
 version = "0.1.0"
 dependencies = [
  "stax-core",
+ "stax-eval",
+ "stax-parser",
 ]
 
 [[package]]

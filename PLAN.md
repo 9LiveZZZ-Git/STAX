@@ -177,7 +177,7 @@ Workspace builds. `Value` enum, `Stream`/`Signal` traits, `Op` enum, empty `Inte
 - **`stax-io`: MIDI in/out via `midir`, OSC via `rosc`** — first-class, not an afterthought. This is what lets stax talk to hardware, DAWs, Ableton Link, TidalCycles, etc.
 - Passes 95%+ of `unit-tests.txt`. Can actually make sound and send/receive control.
 
-### M3.5 — DSP deferred items (implement before or during M4)
+### M3.5 — DSP deferred items (post-M4, before M5)
 
 These were requested but deferred from M3 due to complexity. Implement as `stax-dsp` structs + `stax-eval` words with tests:
 
