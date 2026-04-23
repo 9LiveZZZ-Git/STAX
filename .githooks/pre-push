@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# pre-push: verify stax-editor still compiles to WASM before any push.
+#
+# The live site at https://9LiveZZZ-Git.github.io/STAX/ is rebuilt from
+# every push to main. This hook catches WASM breakage locally so CI
+# never deploys a broken site.
+#
+# To skip in a genuine emergency:  git push --no-verify
+
+set -e
+
+echo "pre-push: checking stax-editor → wasm32 …"
+
+if ! cargo check -p stax-editor --target wasm32-unknown-unknown --quiet 2>&1; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  PUSH BLOCKED: stax-editor does not compile to wasm32."
+    echo ""
+    echo "  Every change that lands in main must keep the web build"
+    echo "  working — the live site at GitHub Pages builds from main."
+    echo ""
+    echo "  Fix the WASM errors above, then push again."
+    echo "  (Use --no-verify only if the failure is a known CI issue.)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    exit 1
+fi
+
+echo "pre-push: wasm32 check passed ✓"

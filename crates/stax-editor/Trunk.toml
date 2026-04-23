@@ -1,0 +1,12 @@
+[build]
+# Trunk is run from crates/stax-editor/
+target  = "index.html"
+release = false
+
+[serve]
+port        = 8080
+open        = false
+ws_protocol = "ws"
+
+[[proxy]]
+backend = "http://localhost:8081"

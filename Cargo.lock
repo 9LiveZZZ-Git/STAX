@@ -3300,6 +3300,9 @@ dependencies = [
  "stax-eval",
  "stax-graph",
  "stax-parser",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

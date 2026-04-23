@@ -60,6 +60,18 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
 
+  wasm:
+    name: WASM check (stax-editor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check (wasm32)
+        run: cargo check -p stax-editor --target wasm32-unknown-unknown
+
   milestones:
     name: Milestone Checker
     runs-on: ubuntu-latest

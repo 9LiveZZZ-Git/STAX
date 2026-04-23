@@ -57,6 +57,7 @@ cobertura.xml
 
 # Generated assets
 /design/dist/
+crates/stax-editor/dist/
 *.wasm
 *.wat
 
