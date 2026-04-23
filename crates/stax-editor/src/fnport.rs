@@ -8,6 +8,7 @@
 //!     input/output stub markers, pan/zoom (Alt+drag / scroll)
 //!   - Toolbar strip: promote · unbind · open in tab · text
 
+use std::collections::HashMap;
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use stax_graph::{Graph, NodeId, PortKind};
 use crate::{app::View, app::StaxApp, shell};
@@ -26,6 +27,12 @@ pub struct FnPortState {
     pub subgraph_pan: Vec2,
     /// Sub-graph canvas zoom level (1.0 = 100 %).
     pub subgraph_zoom: f32,
+    /// Lazily-built subgraph from the MakeFun node's body ops.
+    pub subgraph: Option<Graph>,
+    /// Auto-layout positions for subgraph nodes.
+    pub subgraph_positions: HashMap<NodeId, Pos2>,
+    /// The NodeId for which the subgraph was last built (cache key).
+    pub subgraph_for: Option<NodeId>,
 }
 
 impl Default for FnPortState {
@@ -35,6 +42,9 @@ impl Default for FnPortState {
             selected_port: None,
             subgraph_pan: Vec2::ZERO,
             subgraph_zoom: 1.0,
+            subgraph: None,
+            subgraph_positions: HashMap::new(),
+            subgraph_for: None,
         }
     }
 }
@@ -92,30 +102,40 @@ impl StaxApp {
         self.fnport.selected_port = Some(port_idx);
 
         // Grab node data we need (cloned to avoid borrow conflicts).
-        let (node_label, n_inputs, n_outputs, fun_arity, adverb_str) = {
+        let (node_label, n_inputs, n_outputs, fun_arity, adverb_str, body_ops) = {
             if let Some(node) = self.graph.node(nid) {
                 let label = node.label();
                 let n_in  = node.inputs.len();
                 let n_out = node.outputs.len();
-                // Arity is the number of parameters encoded in the Fun body.
-                // We don't have sub-graph expansion yet, so we derive it from
-                // the MakeFun params length if possible; otherwise show "?".
-                let arity = match &node.kind {
-                    stax_graph::NodeKind::MakeFun { params, .. } => {
-                        format!("{}", params.len())
+                let (arity, ops) = match &node.kind {
+                    stax_graph::NodeKind::MakeFun { params, body } => {
+                        (format!("{}", params.len()), Some(body.to_vec()))
                     }
-                    _ => "?".to_owned(),
+                    _ => ("?".to_owned(), None),
                 };
                 let adv = node.adverb.map(|a| match a {
                     stax_core::Adverb::Reduce   => "/",
                     stax_core::Adverb::Scan     => "\\",
                     stax_core::Adverb::Pairwise => "^",
                 });
-                (label, n_in, n_out, arity, adv)
+                (label, n_in, n_out, arity, adv, ops)
             } else {
                 return;
             }
         };
+
+        // Build or cache the subgraph from the MakeFun body.
+        if self.fnport.subgraph_for != Some(nid) {
+            if let Some(ref ops) = body_ops {
+                let sub = stax_graph::lift(ops);
+                self.fnport.subgraph_positions = crate::graph::auto_layout(&sub);
+                self.fnport.subgraph = Some(sub);
+            } else {
+                self.fnport.subgraph = None;
+                self.fnport.subgraph_positions.clear();
+            }
+            self.fnport.subgraph_for = Some(nid);
+        }
 
         // ── Layout bands ──────────────────────────────────────────────────
 
@@ -251,78 +271,54 @@ impl StaxApp {
             let zoom = self.fnport.subgraph_zoom;
             let origin = canvas_rect.min;
 
-            // Canvas → screen transform
+            // Canvas → screen helper
             let to_screen = |p: Pos2| -> Pos2 {
                 origin + (vec2(p.x, p.y) + pan) * zoom
             };
 
-            // ── λ body placeholder ────────────────────────────────────────
-            // Centered in canvas space at (0, 0)
-            let body_canvas_w = 160.0_f32;
-            let body_canvas_h = 80.0_f32;
-            let body_tl = pos2(-body_canvas_w * 0.5, -body_canvas_h * 0.5);
-            let body_br = pos2( body_canvas_w * 0.5,  body_canvas_h * 0.5);
-            let body_screen = Rect::from_min_max(to_screen(body_tl), to_screen(body_br));
+            if let Some(ref sub) = self.fnport.subgraph.clone() {
+                // ── Real subgraph rendering ───────────────────────────────
 
-            // Dashed PORT_FUN rectangle — simulate dashes via line segments
-            draw_dashed_rect(&clip_painter, body_screen, shell::PORT_FUN, 1.5 * zoom.sqrt(), 6.0, 4.0);
+                let subpos = &self.fnport.subgraph_positions;
 
-            // "λ body" label inside
-            clip_painter.text(
-                body_screen.center(),
-                egui::Align2::CENTER_CENTER,
-                "λ body",
-                egui::FontId::new(12.0 * zoom.sqrt().max(0.6), egui::FontFamily::Monospace),
-                shell::INK_3,
-            );
+                // Draw edges first (under nodes)
+                for edge in sub.edges() {
+                    if let (Some(src_node), Some(dst_node)) = (sub.node(edge.src.node), sub.node(edge.dst.node)) {
+                        let src_canvas = subpos.get(&edge.src.node).copied().unwrap_or(pos2(0.0, 0.0));
+                        let dst_canvas = subpos.get(&edge.dst.node).copied().unwrap_or(pos2(0.0, 0.0));
+                        let src_sz = crate::graph::node_size(src_node);
+                        let dst_sz = crate::graph::node_size(dst_node);
+                        let from_s = to_screen(pos2(src_canvas.x + src_sz.x, src_canvas.y + src_sz.y * 0.5));
+                        let to_s   = to_screen(pos2(dst_canvas.x, dst_canvas.y + dst_sz.y * 0.5));
+                        let kind = src_node.outputs.get(edge.src.port as usize)
+                            .map(|p| &p.kind).unwrap_or(&PortKind::Real);
+                        crate::graph::draw_wire(&clip_painter, from_s, to_s, kind, zoom);
+                    }
+                }
 
-            // ── Input stub (left of body) ──────────────────────────────────
-            let stub_w = 48.0_f32;
-            let stub_h = 22.0_f32;
-            let in_canvas_pos = pos2(body_tl.x - stub_w - 16.0, -stub_h * 0.5);
-            let in_screen = Rect::from_min_max(
-                to_screen(in_canvas_pos),
-                to_screen(pos2(in_canvas_pos.x + stub_w, in_canvas_pos.y + stub_h)),
-            );
-            draw_dashed_rect(&clip_painter, in_screen, shell::PORT_FUN, 1.0 * zoom.sqrt(), 5.0, 3.0);
-            clip_painter.text(
-                in_screen.center(),
-                egui::Align2::CENTER_CENTER,
-                "in",
-                egui::FontId::new(10.0 * zoom.sqrt().max(0.6), egui::FontFamily::Monospace),
-                shell::INK_2,
-            );
-
-            // Wire from input stub right edge to body left edge
-            let wire_from = pos2(in_screen.max.x, in_screen.center().y);
-            let wire_to   = pos2(body_screen.min.x, body_screen.center().y);
-            clip_painter.line_segment(
-                [wire_from, wire_to],
-                Stroke::new(1.0 * zoom.sqrt(), shell::PORT_FUN),
-            );
-
-            // ── Output stub (right of body) ────────────────────────────────
-            let out_canvas_pos = pos2(body_br.x + 16.0, -stub_h * 0.5);
-            let out_screen = Rect::from_min_max(
-                to_screen(out_canvas_pos),
-                to_screen(pos2(out_canvas_pos.x + stub_w, out_canvas_pos.y + stub_h)),
-            );
-            draw_dashed_rect(&clip_painter, out_screen, shell::PORT_FUN, 1.0 * zoom.sqrt(), 5.0, 3.0);
-            clip_painter.text(
-                out_screen.center(),
-                egui::Align2::CENTER_CENTER,
-                "out",
-                egui::FontId::new(10.0 * zoom.sqrt().max(0.6), egui::FontFamily::Monospace),
-                shell::INK_2,
-            );
-
-            // Wire from body right edge to output stub left edge
-            let wire_from2 = pos2(body_screen.max.x, body_screen.center().y);
-            let wire_to2   = pos2(out_screen.min.x, out_screen.center().y);
-            clip_painter.line_segment(
-                [wire_from2, wire_to2],
-                Stroke::new(1.0 * zoom.sqrt(), shell::PORT_FUN),
-            );
+                // Draw nodes
+                for node in sub.nodes_in_order() {
+                    let canvas_pos = subpos.get(&node.id).copied().unwrap_or(pos2(0.0, 0.0));
+                    let screen_pos = to_screen(canvas_pos);
+                    crate::graph::draw_node(
+                        &clip_painter, screen_pos, node,
+                        false, false, zoom, &[], None, None,
+                    );
+                }
+            } else {
+                // ── Fallback: λ body placeholder ──────────────────────────
+                let body_canvas_w = 160.0_f32;
+                let body_canvas_h = 80.0_f32;
+                let body_tl = pos2(-body_canvas_w * 0.5, -body_canvas_h * 0.5);
+                let body_br = pos2( body_canvas_w * 0.5,  body_canvas_h * 0.5);
+                let body_screen = Rect::from_min_max(to_screen(body_tl), to_screen(body_br));
+                draw_dashed_rect(&clip_painter, body_screen, shell::PORT_FUN, 1.5 * zoom.sqrt(), 6.0, 4.0);
+                clip_painter.text(
+                    body_screen.center(), egui::Align2::CENTER_CENTER, "λ body",
+                    egui::FontId::new(12.0 * zoom.sqrt().max(0.6), egui::FontFamily::Monospace),
+                    shell::INK_3,
+                );
+            }
         }
 
         // Canvas border
@@ -414,6 +410,13 @@ impl StaxApp {
             // Sync graph-view selection to the node we're inspecting, then switch.
             self.selected_node = Some(nid);
             self.view = View::Graph;
+        }
+
+        // "text" button (index 3) — jump to text view and try to show the MakeFun source line.
+        let text_clicked = ptr_pos.is_some_and(|p| btn_rects.get(3).is_some_and(|r| r.contains(p)))
+            && clicked;
+        if text_clicked {
+            self.view = View::Text;
         }
     }
 }

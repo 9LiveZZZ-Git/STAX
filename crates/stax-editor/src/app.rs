@@ -103,6 +103,17 @@ pub struct StaxApp {
 
     // Scope samples for sink-node waveforms (last N audio output samples)
     pub scope_samples: Vec<f32>,
+    // Shared ring buffer from the audio runtime (set once play starts).
+    pub audio_scope: Option<std::sync::Arc<std::sync::Mutex<Vec<f32>>>>,
+    // Displayable audio device stat string (e.g. "audio · 48 kHz · 128").
+    pub audio_stat_str: String,
+
+    // File management (C4)
+    pub current_file: Option<std::path::PathBuf>,
+    pub open_files: Vec<std::path::PathBuf>,
+    // Buffer for the "open file" text input in the files panel.
+    pub file_open_buf: String,
+    pub file_open_active: bool,
 
     // Animation
     pub anim_t: f32,
@@ -145,6 +156,7 @@ impl StaxApp {
         }
 
         let source = DEFAULT_SOURCE.to_owned();
+        let audio_stat_str = stax_eval::query_audio_stat();
         let mut app = Self {
             view: View::Graph,
             source_modified: false,
@@ -178,6 +190,12 @@ impl StaxApp {
             travel_step: 0,
             pending_reveal: None,
             scope_samples: Vec::new(),
+            audio_scope: None,
+            audio_stat_str,
+            current_file: None,
+            open_files: Vec::new(),
+            file_open_buf: String::new(),
+            file_open_active: false,
             anim_t: 0.0,
             source,
         };
@@ -196,6 +214,50 @@ impl StaxApp {
                 Some("debug")  => View::Debug,
                 _              => View::Graph,
             };
+
+            // C5: restore rank/adverb overrides
+            if let Some(rank_str) = s.get_string("rank_ovr") {
+                for entry in rank_str.split(',').filter(|s| !s.is_empty()) {
+                    let parts: Vec<&str> = entry.split(':').collect();
+                    if parts.len() == 3 {
+                        if let (Ok(nid_u), Ok(port_u), Ok(rank_u)) = (
+                            parts[0].parse::<u32>(),
+                            parts[1].parse::<u8>(),
+                            parts[2].parse::<u8>(),
+                        ) {
+                            app.rank_overrides.insert(
+                                (stax_graph::NodeId(nid_u), port_u),
+                                rank_u,
+                            );
+                        }
+                    }
+                }
+            }
+            if let Some(adv_str) = s.get_string("adv_ovr") {
+                for entry in adv_str.split(',').filter(|s| !s.is_empty()) {
+                    let parts: Vec<&str> = entry.split(':').collect();
+                    if parts.len() == 2 {
+                        if let (Ok(nid_u), Ok(adv_u)) = (parts[0].parse::<u32>(), parts[1].parse::<u8>()) {
+                            let adv = match adv_u {
+                                1 => Some(stax_core::Adverb::Reduce),
+                                2 => Some(stax_core::Adverb::Scan),
+                                3 => Some(stax_core::Adverb::Pairwise),
+                                _ => None,
+                            };
+                            app.adverb_overrides.insert(stax_graph::NodeId(nid_u), adv);
+                        }
+                    }
+                }
+            }
+
+            // C4: restore current file path
+            if let Some(path_str) = s.get_string("cur_file") {
+                let path = std::path::PathBuf::from(path_str);
+                if path.exists() {
+                    app.file_open_path_inner(&path.clone());
+                    app.current_file = Some(path);
+                }
+            }
         }
 
         app.recompile();
@@ -239,6 +301,12 @@ impl StaxApp {
             travel_step: 0,
             pending_reveal: None,
             scope_samples: Vec::new(),
+            audio_scope: None,
+            audio_stat_str: "audio".to_owned(),
+            current_file: None,
+            open_files: Vec::new(),
+            file_open_buf: String::new(),
+            file_open_active: false,
             anim_t: 0.0,
             source,
         };
@@ -317,6 +385,74 @@ impl StaxApp {
         self.source = self.graph.lower_to_source();
         self.source_modified = true;
         self.recompile();
+    }
+
+    // ── C4: File operations ────────────────────────────────────────────────
+
+    pub fn file_new(&mut self) {
+        self.source = String::new();
+        self.current_file = None;
+        self.source_modified = false;
+        self.recompile();
+    }
+
+    /// Load source from path without updating current_file (used internally).
+    fn file_open_path_inner(&mut self, path: &std::path::Path) {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            self.source = text;
+            self.source_modified = false;
+        }
+    }
+
+    pub fn file_open_path(&mut self, path: std::path::PathBuf) {
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            self.source = text;
+            if !self.open_files.contains(&path) {
+                self.open_files.push(path.clone());
+            }
+            self.current_file = Some(path);
+            self.source_modified = false;
+            self.recompile();
+        }
+    }
+
+    pub fn file_save(&mut self) {
+        if let Some(ref path) = self.current_file.clone() {
+            let _ = std::fs::write(path, &self.source);
+            self.source_modified = false;
+        }
+    }
+
+    pub fn file_save_as(&mut self, path: std::path::PathBuf) {
+        if !self.open_files.contains(&path) {
+            self.open_files.push(path.clone());
+        }
+        self.current_file = Some(path);
+        self.file_save();
+    }
+
+    // ── C2/C3: Scope ring buffer drain ─────────────────────────────────────
+
+    pub fn update_audio_scope(&mut self) {
+        // Acquire scope ring once audio runtime starts.
+        if self.audio_scope.is_none() {
+            self.audio_scope = self.interp.scope_ring();
+        }
+        // Update the audio stat string once we have live data.
+        if let Some((sr, buf)) = self.interp.audio_stat() {
+            self.audio_stat_str = format!("audio · {} kHz · {}", sr / 1000, buf);
+        }
+        // Drain new samples into the scope buffer.
+        if let Some(ref ring) = self.audio_scope.clone() {
+            if let Ok(mut guard) = ring.try_lock() {
+                self.scope_samples.extend(guard.drain(..));
+                let keep = 256usize;
+                if self.scope_samples.len() > keep {
+                    let excess = self.scope_samples.len() - keep;
+                    self.scope_samples.drain(0..excess);
+                }
+            }
+        }
     }
 
     // ── REPL execution ─────────────────────────────────────────────────────
@@ -492,11 +628,36 @@ impl eframe::App for StaxApp {
             View::Debug  => "debug",
         };
         storage.set_string("view", view_str.to_owned());
+
+        // C5: persist rank / adverb overrides
+        let rank_str: String = self.rank_overrides.iter()
+            .map(|((nid, port), rank)| format!("{}:{}:{}", nid.0, port, rank))
+            .collect::<Vec<_>>().join(",");
+        storage.set_string("rank_ovr", rank_str);
+
+        let adv_str: String = self.adverb_overrides.iter()
+            .map(|(nid, adv)| {
+                let code: u8 = match adv {
+                    None => 0,
+                    Some(stax_core::Adverb::Reduce)   => 1,
+                    Some(stax_core::Adverb::Scan)     => 2,
+                    Some(stax_core::Adverb::Pairwise) => 3,
+                };
+                format!("{}:{}", nid.0, code)
+            })
+            .collect::<Vec<_>>().join(",");
+        storage.set_string("adv_ovr", adv_str);
+
+        // C4: persist current file path
+        if let Some(ref path) = self.current_file {
+            storage.set_string("cur_file", path.to_string_lossy().to_string());
+        }
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.anim_t = ctx.input(|i| i.time as f32);
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        self.update_audio_scope();
 
         // ── Reveal router: consume pending cross-view jump ─────────────────
         if let Some(target) = self.pending_reveal.take() {
@@ -656,12 +817,27 @@ impl StaxApp {
             // ── File menu ─────────────────────────────────────────────────
             egui::menu::menu_button(ui, egui::RichText::new("file").color(shell::INK_2).size(12.0).monospace(), |ui| {
                 if ui.button("new patch").clicked() {
-                    self.source = String::new();
-                    self.recompile();
+                    self.file_new();
                     ui.close_menu();
                 }
+                if ui.button("open...").clicked() {
+                    self.file_open_active = true;
+                    self.view = View::Text;
+                    ui.close_menu();
+                }
+                if ui.button("save").clicked() {
+                    self.file_save();
+                    ui.close_menu();
+                }
+                if ui.button("save as...").clicked() {
+                    self.file_open_active = true;
+                    self.view = View::Text;
+                    ui.close_menu();
+                }
+                ui.separator();
                 if ui.button("revert to default").clicked() {
                     self.source = DEFAULT_SOURCE.to_owned();
+                    self.current_file = None;
                     self.recompile();
                     ui.close_menu();
                 }
@@ -742,11 +918,11 @@ impl StaxApp {
                 if play_r.clicked() { self.exec_repl("play"); }
                 ui.add_space(14.0);
 
-                // Audio stat
+                // Audio stat (real device info once queried)
                 let blink = (self.anim_t * 0.667).fract() < 0.5;
                 let dot = if blink { "●" } else { "○" };
                 ui.label(
-                    egui::RichText::new(format!("{dot}  audio · 48 kHz · 128"))
+                    egui::RichText::new(format!("{dot}  {}", self.audio_stat_str))
                         .color(shell::INK_2)
                         .size(11.0)
                         .monospace(),

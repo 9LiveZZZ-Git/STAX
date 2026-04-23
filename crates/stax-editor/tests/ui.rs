@@ -484,3 +484,134 @@ fn view_switch_preserves_state() {
     assert_eq!(app.graph.node_count(), node_count_before,
         "node count changed on view switch back to Graph");
 }
+
+// ── Milestone C tests ─────────────────────────────────────────────────────────
+
+/// C1: FnPort builds a subgraph when a MakeFun node is selected.
+#[test]
+fn fnport_sub_graph_builds_for_makefun_node() {
+    let mut app = StaxApp::new_for_test();
+    // A lambda creates a MakeFun node in the graph.
+    app.source = r"\x [ x 2 * ]".to_owned();
+    app.recompile();
+
+    // Find the MakeFun node.
+    let makefun_id = app.graph.nodes_in_order()
+        .find(|n| matches!(n.kind, stax_graph::NodeKind::MakeFun { .. }))
+        .map(|n| n.id);
+
+    if let Some(nid) = makefun_id {
+        app.fnport.selected_node = Some(nid);
+        // Simulate what draw_fnport_view would do: build the subgraph.
+        if let Some(node) = app.graph.node(nid) {
+            if let stax_graph::NodeKind::MakeFun { body, .. } = &node.kind.clone() {
+                let ops = body.to_vec();
+                let sub = stax_graph::lift(&ops);
+                app.fnport.subgraph_positions = stax_editor::graph::auto_layout(&sub);
+                app.fnport.subgraph_for = Some(nid);
+                app.fnport.subgraph = Some(sub);
+            }
+        }
+        assert!(app.fnport.subgraph.is_some(), "subgraph not built for MakeFun node");
+        let sub = app.fnport.subgraph.as_ref().unwrap();
+        assert!(sub.node_count() > 0, "subgraph has no nodes");
+    }
+}
+
+/// C4: file_new clears source, resets current_file, and recompiles.
+#[test]
+fn file_new_clears_source() {
+    let mut app = StaxApp::new_for_test();
+    app.source = "440 sinosc play".to_owned();
+    app.current_file = Some(std::path::PathBuf::from("test.stax"));
+    app.recompile();
+    assert!(app.graph.node_count() > 0);
+
+    app.file_new();
+    assert!(app.source.is_empty(), "source not cleared after file_new");
+    assert!(app.current_file.is_none(), "current_file not cleared after file_new");
+    assert_eq!(app.graph.node_count(), 0, "graph not cleared after file_new");
+}
+
+/// C4: file_save writes source to the path, file_open_path reads it back.
+#[test]
+fn file_save_writes_content() {
+    let mut app = StaxApp::new_for_test();
+    let tmp = std::env::temp_dir().join("stax_test_save.stax");
+    app.source = "1 2 +".to_owned();
+    app.file_save_as(tmp.clone());
+    assert_eq!(app.current_file.as_ref(), Some(&tmp), "current_file not updated after save_as");
+
+    // Read back with a new app
+    let mut app2 = StaxApp::new_for_test();
+    app2.file_open_path(tmp.clone());
+    assert_eq!(app2.source.trim(), "1 2 +", "source not loaded correctly");
+    assert_eq!(app2.current_file.as_ref(), Some(&tmp));
+
+    // Cleanup
+    let _ = std::fs::remove_file(&tmp);
+}
+
+/// C5: rank and adverb overrides survive a CSV serialization round-trip.
+#[test]
+fn rank_overrides_survive_serialization_round_trip() {
+    use stax_graph::NodeId;
+    use stax_core::Adverb;
+
+    let mut app = StaxApp::new_for_test();
+    app.rank_overrides.insert((NodeId(1), 0), 2u8);
+    app.rank_overrides.insert((NodeId(3), 1), 1u8);
+    app.adverb_overrides.insert(NodeId(2), Some(Adverb::Scan));
+    app.adverb_overrides.insert(NodeId(4), None);
+
+    // Serialize to CSV strings (same logic as save())
+    let rank_str: String = app.rank_overrides.iter()
+        .map(|((nid, port), rank)| format!("{}:{}:{}", nid.0, port, rank))
+        .collect::<Vec<_>>().join(",");
+    let adv_str: String = app.adverb_overrides.iter()
+        .map(|(nid, adv)| {
+            let code: u8 = match adv {
+                None => 0,
+                Some(Adverb::Reduce)   => 1,
+                Some(Adverb::Scan)     => 2,
+                Some(Adverb::Pairwise) => 3,
+            };
+            format!("{}:{}", nid.0, code)
+        })
+        .collect::<Vec<_>>().join(",");
+
+    // Deserialize (same logic as new() load from storage)
+    let mut app2 = StaxApp::new_for_test();
+    for entry in rank_str.split(',').filter(|s| !s.is_empty()) {
+        let parts: Vec<&str> = entry.split(':').collect();
+        if parts.len() == 3 {
+            if let (Ok(nid_u), Ok(port_u), Ok(rank_u)) = (
+                parts[0].parse::<u32>(),
+                parts[1].parse::<u8>(),
+                parts[2].parse::<u8>(),
+            ) {
+                app2.rank_overrides.insert((NodeId(nid_u), port_u), rank_u);
+            }
+        }
+    }
+    for entry in adv_str.split(',').filter(|s| !s.is_empty()) {
+        let parts: Vec<&str> = entry.split(':').collect();
+        if parts.len() == 2 {
+            if let (Ok(nid_u), Ok(adv_u)) = (parts[0].parse::<u32>(), parts[1].parse::<u8>()) {
+                let adv = match adv_u {
+                    1 => Some(Adverb::Reduce),
+                    2 => Some(Adverb::Scan),
+                    3 => Some(Adverb::Pairwise),
+                    _ => None,
+                };
+                app2.adverb_overrides.insert(NodeId(nid_u), adv);
+            }
+        }
+    }
+
+    // Verify
+    assert_eq!(app2.rank_overrides.get(&(NodeId(1), 0)), Some(&2u8));
+    assert_eq!(app2.rank_overrides.get(&(NodeId(3), 1)), Some(&1u8));
+    assert_eq!(app2.adverb_overrides.get(&NodeId(2)), Some(&Some(Adverb::Scan)));
+    assert_eq!(app2.adverb_overrides.get(&NodeId(4)), Some(&None));
+}

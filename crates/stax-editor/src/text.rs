@@ -121,6 +121,50 @@ impl StaxApp {
             Stroke::new(1.0, shell::RULE),
         );
 
+        // ── File open input (shown when file_open_active) ─────────────────
+        if self.file_open_active {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new("path:").color(shell::INK_3).size(11.0).monospace());
+            });
+            let te = ui.add(
+                egui::TextEdit::singleline(&mut self.file_open_buf)
+                    .font(egui::FontId::new(11.0, egui::FontFamily::Monospace))
+                    .desired_width(shell::LIB_W - 12.0)
+                    .hint_text("enter path then ↵")
+            );
+            if te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let path = std::path::PathBuf::from(self.file_open_buf.trim());
+                if !path.as_os_str().is_empty() {
+                    self.file_open_path(path);
+                }
+                self.file_open_buf.clear();
+                self.file_open_active = false;
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.file_open_buf.clear();
+                self.file_open_active = false;
+            }
+            ui.separator();
+        }
+
+        // ── "new" and "open" buttons ──────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            if ui.small_button("new").clicked() { self.file_new(); }
+            ui.add_space(4.0);
+            if ui.small_button("open…").clicked() {
+                self.file_open_active = true;
+                self.file_open_buf.clear();
+            }
+            if let Some(ref path) = self.current_file.clone() {
+                ui.add_space(4.0);
+                if ui.small_button("save").clicked() { self.file_save(); }
+                let _ = path;
+            }
+        });
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.set_width(shell::LIB_W);
             ui.add_space(6.0);
@@ -129,9 +173,29 @@ impl StaxApp {
             section_header(ui, "project", None);
             ui.add_space(4.0);
 
-            let is_active = true;
-            file_row(ui, "patch.stax", is_active);
-            file_row(ui, "prelude.stax", false);
+            // Show open files; highlight the current one.
+            if self.open_files.is_empty() {
+                let cur_name = self.current_file.as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "untitled".to_owned());
+                file_row(ui, &cur_name, true);
+            } else {
+                let current = self.current_file.clone();
+                let open = self.open_files.clone();
+                let mut to_open: Option<std::path::PathBuf> = None;
+                for path in &open {
+                    let name = path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    let is_active = current.as_ref() == Some(path);
+                    let resp = file_row(ui, &name, is_active);
+                    if resp.clicked() && !is_active {
+                        to_open = Some(path.clone());
+                    }
+                }
+                if let Some(p) = to_open { self.file_open_path(p); }
+            }
 
             ui.add_space(8.0);
 
@@ -227,10 +291,14 @@ impl StaxApp {
             );
         }
 
+        let breadcrumb_name = self.current_file.as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "untitled".to_owned());
         ui.painter().text(
             pos2(bc_rect.min.x + 14.0, bc_rect.center().y),
             egui::Align2::LEFT_CENTER,
-            "patch.stax",
+            &breadcrumb_name,
             egui::FontId::new(11.0, egui::FontFamily::Monospace),
             shell::INK_2,
         );
@@ -724,7 +792,7 @@ fn section_header(ui: &mut egui::Ui, title: &str, meta: Option<String>) {
     ui.add_space(4.0);
 }
 
-fn file_row(ui: &mut egui::Ui, name: &str, active: bool) {
+fn file_row(ui: &mut egui::Ui, name: &str, active: bool) -> egui::Response {
     ui.horizontal(|ui| {
         if active {
             let rect = ui.max_rect();
@@ -739,13 +807,13 @@ fn file_row(ui: &mut egui::Ui, name: &str, active: bool) {
             );
         }
         ui.add_space(if active { 16.0 } else { 18.0 });
-        ui.label(
+        ui.add(egui::Label::new(
             egui::RichText::new(name)
                 .color(if active { shell::INK } else { shell::INK_2 })
                 .size(11.0)
                 .monospace(),
-        );
-    });
+        ).sense(egui::Sense::click()))
+    }).inner
 }
 
 fn outline_row(ui: &mut egui::Ui, name: &str, line: usize, active: bool) {

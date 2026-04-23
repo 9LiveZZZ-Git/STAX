@@ -61,6 +61,18 @@ impl Interp {
         interp
     }
 
+    // ---- audio accessors -------------------------------------------------
+
+    /// Returns (sample_rate_hz, buffer_size) if the audio runtime is active.
+    pub fn audio_stat(&self) -> Option<(u32, usize)> {
+        self.audio_rt.as_ref().map(|rt| rt.audio_stat())
+    }
+
+    /// Returns the scope ring buffer Arc if the audio runtime is active.
+    pub fn scope_ring(&self) -> Option<std::sync::Arc<std::sync::Mutex<Vec<f32>>>> {
+        self.audio_rt.as_ref().map(|rt| rt.scope_ring())
+    }
+
     // ---- stack -----------------------------------------------------------
 
     pub fn push(&mut self, v: Value) { self.stack.push(v); }
@@ -588,6 +600,17 @@ fn apply_each_depth_val(
         }
         Ok(make_list(result))
     }
+}
+
+/// Query the default audio device and return a displayable stat string.
+/// Used by the editor at startup before any voice is playing.
+pub fn query_audio_stat() -> String {
+    stax_audio::Runtime::new()
+        .map(|rt| {
+            let (sr, buf) = rt.audio_stat();
+            format!("audio · {} kHz · {}", sr / 1000, buf)
+        })
+        .unwrap_or_else(|_| "no audio device".to_owned())
 }
 
 // ---- shared helpers (pub for tests) -------------------------------------
