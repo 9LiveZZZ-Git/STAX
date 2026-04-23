@@ -697,21 +697,29 @@ impl StaxApp {
         let rect = response.rect;
         let origin = rect.min;
 
-        // Zoom
+        // Zoom — centered on cursor so the point under the pointer stays fixed
         if response.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.0 {
-                self.canvas_zoom = (self.canvas_zoom * (1.0 + scroll * 0.0015)).clamp(0.15, 5.0);
+                let old_zoom = self.canvas_zoom;
+                let new_zoom = (old_zoom * (1.0 + scroll * 0.0015)).clamp(0.15, 5.0);
+                // Adjust pan so the canvas point under the cursor is invariant:
+                //   to_screen(p) = origin + (p + pan) * zoom
+                //   new_pan = old_pan + (cursor - origin) * (1/new_zoom - 1/old_zoom)
+                if let Some(cursor) = ui.input(|i| i.pointer.hover_pos()) {
+                    self.canvas_pan += (cursor - origin) * (1.0 / new_zoom - 1.0 / old_zoom);
+                }
+                self.canvas_zoom = new_zoom;
             }
         }
 
-        // Pan (middle mouse or Alt+drag)
-        if response.dragged_by(egui::PointerButton::Middle) {
-            self.canvas_pan += response.drag_delta();
-        }
+        // Pan (middle mouse or Alt+drag) — divide by zoom: drag_delta is screen px, pan is canvas units
         let alt = ui.input(|i| i.modifiers.alt);
+        if response.dragged_by(egui::PointerButton::Middle) {
+            self.canvas_pan += response.drag_delta() / self.canvas_zoom;
+        }
         if alt && response.dragged_by(egui::PointerButton::Primary) {
-            self.canvas_pan += response.drag_delta();
+            self.canvas_pan += response.drag_delta() / self.canvas_zoom;
         }
 
         // Coordinate helpers

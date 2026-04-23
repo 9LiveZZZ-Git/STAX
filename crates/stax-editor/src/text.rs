@@ -124,6 +124,15 @@ impl StaxApp {
                 let ln = i + 1;
                 let active = ln == self.cursor_line;
 
+                // Paint row background BEFORE content so text renders on top
+                if active {
+                    let row_rect = Rect::from_min_size(
+                        ui.cursor().min,
+                        vec2(ui.available_width(), 18.0),
+                    );
+                    ui.painter().rect_filled(row_rect, 0.0, shell::PAPER_2);
+                }
+
                 ui.horizontal(|ui| {
                     // Live indicator dot (empty for now — future: mark executing lines)
                     ui.add_space(16.0);
@@ -146,11 +155,6 @@ impl StaxApp {
                     let job = crate::syntax::layout_job(line);
                     ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
                 });
-
-                if active {
-                    let row_rect = ui.min_rect();
-                    ui.painter().rect_filled(row_rect, 0.0, shell::PAPER_2);
-                }
             }
         });
 
