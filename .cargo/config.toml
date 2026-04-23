@@ -1,0 +1,3 @@
+[build]
+# The workspace lives deep in AppData; this keeps artifact paths under MAX_PATH.
+target-dir = "C:\\stax-target"

@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell($rustupUrl = \"https://win.rustup.rs/x86_64\"; $dest = \"$env:TEMP\\\\rustup-init.exe\"; Invoke-WebRequest -Uri $rustupUrl -OutFile $dest; Write-Host \"Downloaded to $dest\")",
+      "PowerShell(& \"$env:TEMP\\\\rustup-init.exe\" -y --default-toolchain stable 2>&1)",
+      "PowerShell(cargo *)",
+      "PowerShell(cargo check *)",
+      "PowerShell(cargo test *)",
+      "Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")",
+      "Bash(cargo test *)",
+      "Bash(~/.cargo/bin/cargo test *)",
+      "Read(//c/Users/lpfre/AppData/Roaming/Claude/local-agent-mode-sessions/17dc9ad6-3c5d-4bbc-807c-b050a0df91f2/1edca914-8280-4b53-a35e-c10e2cb628d8/local_6b8ca2a2-ad4f-4bc3-8a1d-dfa810802929/outputs/scratch/**)",
+      "Bash(awk 'BEGIN{n=0} /^\".*\"$/{n++; if\\(n>=178 && n<=185\\) print n\": \"$0}' sapf/unit-tests.txt)",
+      "Bash(awk 'BEGIN{n=0} /^\".*\"$/{n++; print n\": \"$0}' \"C:/Users/lpfre/AppData/Roaming/Claude/local-agent-mode-sessions/17dc9ad6-3c5d-4bbc-807c-b050a0df91f2/1edca914-8280-4b53-a35e-c10e2cb628d8/local_6b8ca2a2-ad4f-4bc3-8a1d-dfa810802929/outputs/scratch/sapf/unit-tests.txt\")",
+      "Bash(grep -v \"//.*Z\\\\|//.*V\")",
+      "Bash(~/.cargo/bin/cargo check *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo run *)",
+      "Bash(grep -E \"\\(test |FAILED|ok$\\)\")",
+      "Bash(grep -E \"\\(test interp|FAILED|ok$|result:\\)\")",
+      "Bash(grep -v \"^--$\")",
+      "Bash(awk '{sum += $4} END {print \"Total tests passed:\", sum}')",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)",
+      "Bash(git config *)",
+      "Bash(git --version)"
+    ]
+  }
+}

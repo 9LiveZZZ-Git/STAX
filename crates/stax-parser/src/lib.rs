@@ -389,8 +389,15 @@ impl Parser {
     }
 
     fn parse_word_or_adverb(&mut self) -> Vec<Op> {
-        let word = self.read_word();
+        let mut word = self.read_word();
         if word.is_empty() { return vec![]; }
+
+        // `<=` and `>=`: `=` is excluded from is_word_char (it triggers bind syntax),
+        // so `<` and `>` stop there. Peek-ahead and consume the `=` if present.
+        if (word == "<" || word == ">") && self.peek() == Some('=') {
+            self.advance();
+            word.push('=');
+        }
 
         // Adverb suffixes
         if let Some(stem) = word.strip_suffix('/') {
@@ -520,6 +527,33 @@ mod tests {
     fn comment() {
         let ops = parse("1 ; ignored\n2").unwrap();
         assert_eq!(ops.len(), 2);
+    }
+
+    #[test]
+    fn lte_gte_tokenise_correctly() {
+        // Regression: `=` was excluded from is_word_char (to support `= bind` syntax),
+        // so `<` and `>` stopped there and `=` was silently dropped.
+        // Fixed by peeking after `<`/`>` in parse_word_or_adverb.
+        let lte = parse("3 3 <=").unwrap();
+        assert_eq!(lte.len(), 3);
+        assert!(matches!(&lte[2], Op::Word(w) if w.as_ref() == "<="),
+            "expected Word(\"<=\"), got {:?}", lte[2]);
+
+        let gte = parse("5 3 >=").unwrap();
+        assert_eq!(gte.len(), 3);
+        assert!(matches!(&gte[2], Op::Word(w) if w.as_ref() == ">="),
+            "expected Word(\">=\"), got {:?}", gte[2]);
+
+        // Ensure plain `<` and `>` still parse correctly (no accidental merge).
+        let lt = parse("3 5 <").unwrap();
+        assert!(matches!(&lt[2], Op::Word(w) if w.as_ref() == "<"));
+
+        let gt = parse("5 3 >").unwrap();
+        assert!(matches!(&gt[2], Op::Word(w) if w.as_ref() == ">"));
+
+        // Ensure `= bind` still works after `<` or `>`.
+        let bind = parse("3 5 < = result").unwrap();
+        assert!(matches!(&bind[3], Op::Bind(n) if n.as_ref() == "result"));
     }
 
     #[test]

@@ -16,8 +16,11 @@ pub use stax_core::signal::{BinarySignal, ConstSignal, UnarySignal};
 #[inline(always)]
 fn lcg_next(seed: &mut u64) -> f32 {
     *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-    // Map to [-1, 1)
-    (*seed >> 33) as f32 / (u32::MAX as f32) * 2.0 - 1.0
+    // Map upper 32 bits to [-1, 1). `>> 32` yields a 32-bit value [0, 2^32-1];
+    // dividing by u32::MAX gives [0, 1], then * 2 - 1 gives [-1, 1].
+    // (Bug was `>> 33` which only uses 31 bits, capping the ratio at ~0.5
+    //  and biasing the output to [-1, 0) with mean ≈ -0.5.)
+    (*seed >> 32) as f32 / (u32::MAX as f32) * 2.0 - 1.0
 }
 
 // ---- SinOsc -----------------------------------------------------------------
