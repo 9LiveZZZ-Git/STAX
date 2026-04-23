@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>stax</title>
+  <!-- trunk directive: compile the Rust binary to WASM and inject the loader -->
+  <link data-trunk rel="rust" data-wasm-opt="2" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -42,6 +44,5 @@
 <body>
   <div id="loading"><p>loading stax…</p></div>
   <canvas id="stax_canvas"></canvas>
-  <!-- trunk injects the WASM loader script here -->
 </body>
 </html>
