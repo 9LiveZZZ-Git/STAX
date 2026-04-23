@@ -162,9 +162,9 @@ jobs:
 
       - name: "M1 — 365/365 SAPF unit tests"
         run: |
-          cargo test -p stax-eval --test sapf_unit 2>&1 | tee /tmp/m1.txt
-          grep -E "^test result" /tmp/m1.txt
-          PASSED=$(grep -oP '\d+ passed' /tmp/m1.txt | grep -oP '\d+' | tail -1)
+          cargo test -p stax-eval --test sapf_unit -- --nocapture 2>&1 | tee /tmp/m1.txt
+          grep -E "^test result|SAPF unit tests" /tmp/m1.txt
+          PASSED=$(grep -oP 'SAPF unit tests: \K\d+' /tmp/m1.txt | tail -1)
           echo "SAPF tests passed: $PASSED / 365"
           [ "$PASSED" = "365" ] || { echo "M1 FAIL: expected 365 passed, got $PASSED"; exit 1; }
 
