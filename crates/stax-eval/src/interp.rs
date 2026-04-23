@@ -3388,47 +3388,43 @@ fn install_builtins(i: &mut Interp) {
     // ---- OSC ----------------------------------------------------------------
 
     // args: list of Reals (sent as OscFloat) or Strings (sent as OscString)
+    #[cfg(not(target_arch = "wasm32"))]
     reg(i, "oscSend", |i| {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let args_val = i.pop()?;
-            let addr_val = i.pop()?;
-            let port = real_val(&i.pop()?)? as u16;
-            let host = match i.pop()? {
-                Value::Str(s) | Value::Sym(s) => s.to_string(),
-                other => {
-                    return Err(Error::Type {
-                        expected: "Str",
-                        actual: other.kind().name(),
-                    })
-                }
-            };
-            let addr = match addr_val {
-                Value::Str(s) | Value::Sym(s) => s.to_string(),
-                other => {
-                    return Err(Error::Type {
-                        expected: "Str",
-                        actual: other.kind().name(),
-                    })
-                }
-            };
-            let raw = collect_to_vec(&args_val)?;
-            let osc_args: Vec<stax_io::OscType> = raw
-                .iter()
-                .map(|v| match v {
-                    Value::Real(x) => stax_io::OscType::Float(*x as f32),
-                    Value::Str(s) | Value::Sym(s) => stax_io::OscType::String(s.to_string()),
-                    _ => stax_io::OscType::Float(0.0),
+        let args_val = i.pop()?;
+        let addr_val = i.pop()?;
+        let port = real_val(&i.pop()?)? as u16;
+        let host = match i.pop()? {
+            Value::Str(s) | Value::Sym(s) => s.to_string(),
+            other => {
+                return Err(Error::Type {
+                    expected: "Str",
+                    actual: other.kind().name(),
                 })
-                .collect();
-            stax_io::osc_send(&host, port, &addr, osc_args)
-                .map_err(|e| Error::Other(e.to_string()))?;
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            return Err(Error::Other("oscSend not available in WASM".into()));
-        }
-        Ok(())
+            }
+        };
+        let addr = match addr_val {
+            Value::Str(s) | Value::Sym(s) => s.to_string(),
+            other => {
+                return Err(Error::Type {
+                    expected: "Str",
+                    actual: other.kind().name(),
+                })
+            }
+        };
+        let raw = collect_to_vec(&args_val)?;
+        let osc_args: Vec<stax_io::OscType> = raw
+            .iter()
+            .map(|v| match v {
+                Value::Real(x) => stax_io::OscType::Float(*x as f32),
+                Value::Str(s) | Value::Sym(s) => stax_io::OscType::String(s.to_string()),
+                _ => stax_io::OscType::Float(0.0),
+            })
+            .collect();
+        stax_io::osc_send(&host, port, &addr, osc_args).map_err(|e| Error::Other(e.to_string()))
+    });
+    #[cfg(target_arch = "wasm32")]
+    reg(i, "oscSend", |_i| {
+        Err(Error::Other("oscSend not available in WASM".into()))
     });
 
     // ---- Sample-rate constants -------------------------------------------
