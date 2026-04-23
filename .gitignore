@@ -23,6 +23,9 @@
 .AppleDouble
 .LSOverride
 
+# Cargo local config (target-dir and other machine-specific settings)
+.cargo/config.toml
+
 # Windows
 Thumbs.db
 ehthumbs.db
