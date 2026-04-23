@@ -3,6 +3,7 @@ use egui::{pos2, vec2, Pos2, Rect, Stroke, Vec2};
 use stax_core::Op;
 use stax_eval::Interp;
 use stax_graph::{Graph, NodeId};
+use crate::fnport::FnPortState;
 use crate::shell;
 
 // ── View enum ──────────────────────────────────────────────────────────────
@@ -50,6 +51,9 @@ pub struct StaxApp {
 
     // Text view state
     pub cursor_line: usize,
+
+    // Fn-port view state
+    pub fnport: FnPortState,
 
     // Animation
     pub anim_t: f32,
@@ -107,6 +111,7 @@ impl StaxApp {
             selected_node: None,
             dragging: None,
             cursor_line: 1,
+            fnport: FnPortState::default(),
             anim_t: 0.0,
             source,
         };
@@ -251,7 +256,7 @@ impl eframe::App for StaxApp {
 
         // ── View-specific side panels & central area ───────────────────────
         match self.view {
-            View::Graph | View::FnPort => {
+            View::Graph => {
                 egui::SidePanel::left("library")
                     .exact_width(shell::LIB_W)
                     .frame(frame_none)
@@ -267,6 +272,23 @@ impl eframe::App for StaxApp {
                 egui::CentralPanel::default()
                     .frame(frame_none)
                     .show(ctx, |ui| self.draw_graph_canvas(ui));
+            }
+            View::FnPort => {
+                egui::SidePanel::left("library")
+                    .exact_width(shell::LIB_W)
+                    .frame(frame_none)
+                    .show_separator_line(false)
+                    .show(ctx, |ui| self.draw_library(ui));
+
+                egui::SidePanel::right("inspector")
+                    .exact_width(shell::INSP_W)
+                    .frame(frame_none)
+                    .show_separator_line(false)
+                    .show(ctx, |ui| self.draw_inspector(ui));
+
+                egui::CentralPanel::default()
+                    .frame(frame_none)
+                    .show(ctx, |ui| self.draw_fnport_view(ui));
             }
             View::Text => {
                 egui::SidePanel::left("files_panel")
