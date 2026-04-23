@@ -14,25 +14,9 @@ fn try_run(src: &str) -> Option<bool> {
 
 #[test]
 fn sapf_unit_tests() {
-    let _path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../../outputs/scratch/sapf/unit-tests.txt"
-    );
-
-    // Normalise: the file is relative to the workspace root, which is two levels up
-    // from the crate dir.  Use an absolute sibling path instead.
-    let abs = {
-        let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        // crate dir: …/stax/crates/stax-eval
-        // workspace:  …/stax
-        // sibling:    …/sapf/unit-tests.txt
-        let workspace = crate_dir.parent().unwrap().parent().unwrap();
-        workspace
-            .parent()
-            .unwrap()
-            .join("sapf")
-            .join("unit-tests.txt")
-    };
+    let abs = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("sapf-unit-tests.txt");
 
     let raw =
         std::fs::read_to_string(&abs).unwrap_or_else(|e| panic!("Cannot read {:?}: {e}", abs));
