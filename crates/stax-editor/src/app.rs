@@ -9,7 +9,7 @@ use crate::shell;
 // ── View enum ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum View { Graph, Text, FnPort }
+pub enum View { Graph, Text, FnPort, Debug }
 
 // ── Time-travel snapshot ───────────────────────────────────────────────────
 
@@ -167,6 +167,7 @@ impl StaxApp {
             app.view = match s.get_string("view").as_deref() {
                 Some("text")   => View::Text,
                 Some("fnport") => View::FnPort,
+                Some("debug")  => View::Debug,
                 _              => View::Graph,
             };
         }
@@ -367,7 +368,7 @@ impl StaxApp {
             .exact_height(shell::BOTBAR_H).frame(frame_none.fill(shell::PAPER))
             .show_separator_line(false).show(ctx, |ui| self.draw_botbar(ui));
 
-        if matches!(self.view, View::Graph | View::FnPort) {
+        if matches!(self.view, View::Graph | View::FnPort | View::Debug) {
             egui::TopBottomPanel::bottom("rf_repl")
                 .exact_height(shell::REPL_H).frame(frame_none)
                 .show_separator_line(false).show(ctx, |ui| self.draw_graph_repl(ui));
@@ -401,6 +402,10 @@ impl StaxApp {
                 egui::CentralPanel::default().frame(frame_none)
                     .show(ctx, |ui| self.draw_text_editor(ui));
             }
+            View::Debug => {
+                egui::CentralPanel::default().frame(frame_none)
+                    .show(ctx, |ui| self.draw_debug_view(ui));
+            }
         }
     }
 }
@@ -414,6 +419,7 @@ impl eframe::App for StaxApp {
             View::Graph  => "graph",
             View::Text   => "text",
             View::FnPort => "fnport",
+            View::Debug  => "debug",
         };
         storage.set_string("view", view_str.to_owned());
     }
@@ -467,7 +473,7 @@ impl eframe::App for StaxApp {
             .show(ctx, |ui| self.draw_botbar(ui));
 
         // ── Graph-view extras: REPL (120px) + time-travel (34px) ──────────
-        if matches!(self.view, View::Graph | View::FnPort) {
+        if matches!(self.view, View::Graph | View::FnPort | View::Debug) {
             egui::TopBottomPanel::bottom("repl_panel")
                 .exact_height(shell::REPL_H)
                 .frame(frame_none)
@@ -534,6 +540,11 @@ impl eframe::App for StaxApp {
                     .frame(frame_none)
                     .show(ctx, |ui| self.draw_text_editor(ui));
             }
+            View::Debug => {
+                egui::CentralPanel::default()
+                    .frame(frame_none)
+                    .show(ctx, |ui| self.draw_debug_view(ui));
+            }
         }
     }
 }
@@ -589,9 +600,10 @@ impl StaxApp {
 
             // ── View menu ─────────────────────────────────────────────────
             egui::menu::menu_button(ui, egui::RichText::new("view").color(shell::INK_2).size(12.0).monospace(), |ui| {
-                if ui.button("graph").clicked() { self.view = View::Graph; ui.close_menu(); }
-                if ui.button("text").clicked()  { self.view = View::Text; ui.close_menu(); }
+                if ui.button("graph").clicked()   { self.view = View::Graph;  ui.close_menu(); }
+                if ui.button("text").clicked()    { self.view = View::Text;   ui.close_menu(); }
                 if ui.button("fn-port").clicked() { self.view = View::FnPort; ui.close_menu(); }
+                if ui.button("debug").clicked()   { self.view = View::Debug;  ui.close_menu(); }
                 ui.separator();
                 if ui.button("reset canvas").clicked() {
                     self.canvas_pan = Vec2::ZERO;
@@ -712,6 +724,7 @@ impl StaxApp {
                 (View::Graph,  "graph"),
                 (View::Text,   "text"),
                 (View::FnPort, "fn-port"),
+                (View::Debug,  "debug"),
             ] {
                 let active = self.view == view;
                 let resp = ui.add(
@@ -781,7 +794,7 @@ impl StaxApp {
             ui.add_space(14.0);
 
             let status = if self.parse_error.is_some() {
-                ("✕  parse error", shell::WARM)
+                ("✕  parse error", shell::ERR)
             } else {
                 ("✓  ready", shell::COOL)
             };

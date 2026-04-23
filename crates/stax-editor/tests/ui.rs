@@ -76,13 +76,45 @@ fn harness_full_app_fnport_view() {
     harness.run();
 }
 
-/// Renders multiple frames cycling through all three views — tests tab consistency.
+/// Full app shell renders debug view without panic.
+#[test]
+fn harness_full_app_debug_view() {
+    let mut app = StaxApp::new_for_test();
+    app.view = View::Debug;
+    // Populate some state so all sections have data to render
+    app.exec_repl("440 sinosc");
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    for _ in 0..3 {
+        harness.run();
+    }
+}
+
+/// Debug view renders correctly after REPL populates stack, snapshots, and history.
+#[test]
+fn harness_debug_view_with_state() {
+    let mut app = StaxApp::new_for_test();
+    app.source = "440 sinosc play".to_owned();
+    app.recompile();
+    for i in 1..=5 { app.exec_repl(&format!("{i}")); }
+    app.view = View::Debug;
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    for _ in 0..2 {
+        harness.run();
+    }
+}
+
+/// Renders multiple frames cycling through all four views — tests tab consistency.
 #[test]
 fn harness_all_views_cycle_no_panic() {
-    let views = [View::Graph, View::Text, View::FnPort,
-                 View::Graph, View::Text, View::FnPort];
+    let views = [View::Graph, View::Text, View::FnPort, View::Debug,
+                 View::Graph, View::Text, View::FnPort, View::Debug];
     let mut idx = 0usize;
     let mut app = StaxApp::new_for_test();
+    app.exec_repl("2 3 +"); // ensure there's something in REPL + stack
     let mut harness = Harness::new(move |ctx| {
         app.view = views[idx % views.len()];
         idx += 1;
