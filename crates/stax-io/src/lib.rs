@@ -48,7 +48,7 @@ mod native {
             let port = ports
                 .get(port_idx)
                 .ok_or_else(|| anyhow!("MIDI output port {port_idx} not found"))?;
-            let conn = mo.connect(port, "stax-out")?;
+            let conn = mo.connect(port, "stax-out").map_err(|e| anyhow!("{e}"))?;
             Ok(Self { conn })
         }
 
@@ -113,18 +113,20 @@ mod native {
                 .ok_or_else(|| anyhow!("MIDI input port {port_idx} not found"))?;
             let queue: Arc<Mutex<VecDeque<[u8; 3]>>> = Arc::new(Mutex::new(VecDeque::new()));
             let q2 = Arc::clone(&queue);
-            let conn = mi.connect(
-                port,
-                "stax-in",
-                move |_stamp, msg, _| {
-                    if msg.len() >= 3 {
-                        if let Ok(mut q) = q2.lock() {
-                            q.push_back([msg[0], msg[1], msg[2]]);
+            let conn = mi
+                .connect(
+                    port,
+                    "stax-in",
+                    move |_stamp, msg, _| {
+                        if msg.len() >= 3 {
+                            if let Ok(mut q) = q2.lock() {
+                                q.push_back([msg[0], msg[1], msg[2]]);
+                            }
                         }
-                    }
-                },
-                (),
-            )?;
+                    },
+                    (),
+                )
+                .map_err(|e| anyhow!("{e}"))?;
             Ok(Self { _conn: conn, queue })
         }
 
