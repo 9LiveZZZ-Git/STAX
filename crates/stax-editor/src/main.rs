@@ -35,5 +35,12 @@ fn main() {
             )
             .await
             .expect("failed to start stax");
+        // Hide the loading overlay once the app has initialised.
+        if let Some(el) = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.get_element_by_id("loading"))
+        {
+            let _ = el.set_attribute("style", "display:none");
+        }
     });
 }
