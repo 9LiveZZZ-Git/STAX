@@ -5,7 +5,7 @@
 [![SAPF Compatibility](https://img.shields.io/badge/SAPF-365%2F365-brightgreen)](https://github.com/lfnoise/sapf)
 [![Rust](https://img.shields.io/badge/rust-2021%20edition-orange.svg)](https://www.rust-lang.org/)
 
-A Rust reimplementation of **SAPF** (Sound As Pure Form) — James McCartney's stack-based concatenative audio programming language — extended with a planned node-based visual editor, GPU operators, and JIT-compiled signal paths.
+A Rust reimplementation of **SAPF** (Sound As Pure Form) — James McCartney's stack-based concatenative audio programming language — with a working node-based visual editor, GPU operators, and JIT-compiled signal paths on the roadmap.
 
 ---
 
@@ -34,7 +34,7 @@ stax is a faithful Rust port of the SAPF language (passes all 365 of McCartney's
 | SVF, FDN reverb, phase vocoder, granular | — | ✅ |
 | CQT, MDCT, Thiran, Farrow, LPC, Goertzel | — | ✅ |
 | Strange attractors (Lorenz, Rössler, Duffing) | — | ✅ |
-| Node-based visual editor (egui) | — | M5 |
+| Node-based visual editor (egui) | — | ✅ |
 | GPU operators | — | M9 |
 | JIT-compiled signal paths | — | M10 |
 
@@ -49,14 +49,14 @@ stax is a faithful Rust port of the SAPF language (passes all 365 of McCartney's
 | **M2** | Rank-polymorphic dispatch, `@`/`@@`/`@@@`, outer products, deterministic seeds | ✅ |
 | **M3** | Audio runtime (cpal), MIDI/OSC, full DSP suite, Tier 1/2 extended DSP | ✅ |
 | **M4** | Graph IR + text↔graph round-trip (`stax-graph`) | ✅ |
-| **M5** | egui editor: text, graph, function-port views | 🔲 |
+| **M5** | egui editor: graph view, text view, embedded REPL | ✅ |
 | **M6** | WASM / AudioWorklet browser target | 🔲 |
 | **M7** | Arrangement, clips, automation | 🔲 |
 | **M8** | VST/AU plugin target | 🔲 |
 | **M9** | GPU operators | 🔲 |
 | **M10** | JIT-compiled signal paths | 🔲 |
 
-**Current test counts:** 94 unit tests + 6 DSP tests + 365/365 SAPF integration + 36 graph tests = **136 passing**.
+**Current test count: 489 passing** (365 SAPF integration + 94 interpreter + 36 graph + 6 DSP + others).
 
 ---
 
@@ -75,6 +75,9 @@ cargo run --bin stax-repl
 5
 > 440 sinosc play
 # ... audio plays ...
+
+# Visual editor (graph + text views)
+cargo run --bin stax-editor
 ```
 
 **Linux users:** ALSA headers are required for audio.
@@ -82,6 +85,20 @@ cargo run --bin stax-repl
 ```sh
 sudo apt-get install libasound2-dev libjack-jackd2-dev
 ```
+
+---
+
+## Editor (M5)
+
+The `stax-editor` binary is a native desktop app (eframe/egui) implementing two views over the same program:
+
+**Graph view** — the default. Each word in the program is a node; data-flow edges are wires coloured by type (terracotta = signal, teal = stream, violet = function, black = scalar). The canvas supports pan (Alt+drag or middle-mouse), zoom (scroll, cursor-centred), and click-to-select with node drag.
+
+**Text view** — syntax-highlighted source with a files/outline sidebar and a stack inspector + REPL on the right. Switch views with the tab strip at the top.
+
+**Embedded REPL** — available in both views. Type any stax expression and press Enter; the result appears immediately. Special commands: `.s` (show stack), `.c` (clear stack).
+
+The editor design follows a "refined brutalism" aesthetic derived from `design/*.html` — no rounded corners, no shadows, port-type colours appear nowhere else in the UI, and `--warm` (terracotta) marks only active/selected state.
 
 ---
 
@@ -124,10 +141,10 @@ nat 3 to cyc 8 N   // → [1 2 3 1 2 3 1 2]
 ## Architecture
 
 ```
-stax-parser ──► Vec<Op> ◄── stax-graph (M4)
-                   │
-              stax-eval  (stack machine, all built-ins)
-                   │
+stax-parser ──► Vec<Op> ◄── stax-graph  ◄── stax-editor
+                   │             │                │
+              stax-eval     lift/lower        graph + text
+                   │                           views, REPL
          ┌─────────┼─────────┐
       stax-dsp  stax-audio  stax-io
     (DSP prims)  (cpal)   (MIDI/OSC)
@@ -145,8 +162,8 @@ The single `Vec<Op>` IR is what makes lossless text↔graph round-tripping possi
 | `stax-dsp` | oscillators, filters, attractors, full DSP suite | ✅ |
 | `stax-audio` | cpal native runtime + WASM stub | ✅ |
 | `stax-io` | MIDI out (midir) + OSC (rosc) | ✅ |
-| `stax-graph` | graph IR + round-trip | ✅ |
-| `stax-editor` | egui node editor | M5 |
+| `stax-graph` | graph IR + `lift`/`lower` round-trip | ✅ |
+| `stax-editor` | egui node editor — graph + text views | ✅ |
 | `stax-arrange` | transport, clips, automation | M7 |
 | `stax-plugin` | VST/AU target | M8 |
 | `stax-gpu` | GPU operators | M9 |
@@ -261,7 +278,7 @@ stax is built on top of **SAPF** (Sound As Pure Form) by **James McCartney**.
 - The 365 unit tests in `crates/stax-eval/tests/sapf_unit.rs` are derived from McCartney's `unit-tests.txt`.
 - The language semantics, stack model, and APL-style rank operators originate entirely with McCartney's design.
 
-stax adds a Rust implementation, extended DSP, cross-platform audio I/O, and a planned visual editor — but the language itself is his.
+stax adds a Rust implementation, extended DSP, cross-platform audio I/O, and a visual editor — but the language itself is his.
 
 ---
 
