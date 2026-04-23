@@ -15,3 +15,6 @@ stax-parser = { workspace = true }
 stax-graph  = { workspace = true }
 egui        = "0.31"
 eframe      = { version = "0.31", features = ["default_fonts", "persistence"] }
+
+[dev-dependencies]
+egui_kittest = "0.31"

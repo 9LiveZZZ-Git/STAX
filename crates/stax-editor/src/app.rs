@@ -175,6 +175,41 @@ impl StaxApp {
         app
     }
 
+    // ── Test constructor (no eframe::CreationContext needed) ───────────────
+
+    pub fn new_for_test() -> Self {
+        let source = DEFAULT_SOURCE.to_owned();
+        let mut app = Self {
+            view: View::Graph,
+            source_modified: false,
+            ops: Vec::new(),
+            graph: stax_graph::Graph::new(),
+            parse_error: None,
+            interp: stax_eval::Interp::new(),
+            repl_input: String::new(),
+            repl_history: Vec::new(),
+            canvas_pan: Vec2::ZERO,
+            canvas_zoom: 1.0,
+            node_positions: HashMap::new(),
+            selected_node: None,
+            dragging: None,
+            cursor_line: 1,
+            cursor_stack: Vec::new(),
+            cursor_stack_line: 0,
+            fnport: crate::fnport::FnPortState::default(),
+            rank_overrides: HashMap::new(),
+            adverb_overrides: HashMap::new(),
+            travel_snapshots: Vec::new(),
+            travel_step: 0,
+            pending_reveal: None,
+            scope_samples: Vec::new(),
+            anim_t: 0.0,
+            source,
+        };
+        app.recompile();
+        app
+    }
+
     // ── Cursor-stack: re-eval lines 1..cursor_line ─────────────────────────
 
     pub fn compute_cursor_stack(&mut self) {
@@ -428,7 +463,7 @@ impl eframe::App for StaxApp {
 // ── Shell chrome ───────────────────────────────────────────────────────────
 
 impl StaxApp {
-    fn draw_header(&self, ui: &mut egui::Ui) {
+    fn draw_header(&mut self, ui: &mut egui::Ui) {
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, shell::PAPER);
         // Bottom border
@@ -457,34 +492,94 @@ impl StaxApp {
                 [sep_rect.center_top(), sep_rect.center_bottom()],
                 Stroke::new(1.0, shell::RULE),
             );
-            ui.add_space(14.0);
+            ui.add_space(8.0);
 
-            // Menu
-            for name in ["file", "edit", "view", "run", "help"] {
-                ui.label(
-                    egui::RichText::new(name).color(shell::INK_2).size(12.0).monospace(),
-                );
-                ui.add_space(6.0);
-            }
+            // ── File menu ─────────────────────────────────────────────────
+            egui::menu::menu_button(ui, egui::RichText::new("file").color(shell::INK_2).size(12.0).monospace(), |ui| {
+                if ui.button("new patch").clicked() {
+                    self.source = String::new();
+                    self.recompile();
+                    ui.close_menu();
+                }
+                if ui.button("revert to default").clicked() {
+                    self.source = DEFAULT_SOURCE.to_owned();
+                    self.recompile();
+                    ui.close_menu();
+                }
+            });
+            ui.add_space(4.0);
+
+            // ── View menu ─────────────────────────────────────────────────
+            egui::menu::menu_button(ui, egui::RichText::new("view").color(shell::INK_2).size(12.0).monospace(), |ui| {
+                if ui.button("graph").clicked() { self.view = View::Graph; ui.close_menu(); }
+                if ui.button("text").clicked()  { self.view = View::Text; ui.close_menu(); }
+                if ui.button("fn-port").clicked() { self.view = View::FnPort; ui.close_menu(); }
+                ui.separator();
+                if ui.button("reset canvas").clicked() {
+                    self.canvas_pan = Vec2::ZERO;
+                    self.canvas_zoom = 1.0;
+                    ui.close_menu();
+                }
+                if ui.button("fit to nodes").clicked() {
+                    self.fit_canvas_to_nodes();
+                    ui.close_menu();
+                }
+            });
+            ui.add_space(4.0);
+
+            // ── Run menu ──────────────────────────────────────────────────
+            egui::menu::menu_button(ui, egui::RichText::new("run").color(shell::INK_2).size(12.0).monospace(), |ui| {
+                if ui.button("compile (⌘R)").clicked() {
+                    self.recompile();
+                    ui.close_menu();
+                }
+                if ui.button("play").clicked() {
+                    self.exec_repl("play");
+                    ui.close_menu();
+                }
+                if ui.button("stop").clicked() {
+                    self.exec_repl("stop");
+                    ui.close_menu();
+                }
+                ui.separator();
+                if ui.button("clear stack").clicked() {
+                    self.interp.stack.clear();
+                    ui.close_menu();
+                }
+            });
+            ui.add_space(4.0);
+
+            // ── Help menu ─────────────────────────────────────────────────
+            egui::menu::menu_button(ui, egui::RichText::new("help").color(shell::INK_2).size(12.0).monospace(), |ui| {
+                ui.label(egui::RichText::new("stax — sound as pure form").color(shell::INK_2).size(11.0).monospace());
+                ui.separator();
+                ui.label(egui::RichText::new("REPL commands:").color(shell::INK_3).size(10.0).monospace());
+                ui.label(egui::RichText::new(".s  show stack").color(shell::INK_2).size(10.0).monospace());
+                ui.label(egui::RichText::new(".c  clear stack").color(shell::INK_2).size(10.0).monospace());
+            });
 
             // Right-aligned: audio status + transport
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(14.0);
 
-                // Transport
+                // Transport: stop
                 let sep = ui.allocate_space(vec2(1.0, 20.0)).1;
                 ui.painter().line_segment(
                     [sep.center_top(), sep.center_bottom()],
                     Stroke::new(1.0, shell::RULE),
                 );
                 ui.add_space(8.0);
-                ui.label(
-                    egui::RichText::new("■ stop").color(shell::WARM).size(12.0).monospace(),
-                );
+                let stop_r = ui.add(egui::Label::new(
+                    egui::RichText::new("■ stop").color(shell::WARM).size(12.0).monospace()
+                ).sense(egui::Sense::click()));
+                if stop_r.clicked() { self.exec_repl("stop"); }
                 ui.add_space(8.0);
-                ui.label(
-                    egui::RichText::new("▶ play").color(shell::INK).size(12.0).monospace(),
-                );
+
+                // Transport: play
+                let play_r = ui.add(egui::Label::new(
+                    egui::RichText::new("▶ play").color(shell::INK).size(12.0).monospace()
+                ).sense(egui::Sense::click()));
+                if play_r.clicked() { self.exec_repl("play"); }
                 ui.add_space(14.0);
 
                 // Audio stat
@@ -498,6 +593,29 @@ impl StaxApp {
                 );
             });
         });
+    }
+
+    pub fn fit_canvas_to_nodes(&mut self) {
+        if self.node_positions.is_empty() { return; }
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+        for &pos in self.node_positions.values() {
+            min_x = min_x.min(pos.x);
+            min_y = min_y.min(pos.y);
+            max_x = max_x.max(pos.x + 120.0);
+            max_y = max_y.max(pos.y + 40.0);
+        }
+        let w = max_x - min_x;
+        let h = max_y - min_y;
+        let pad = 60.0_f32;
+        // Center at 600×400 viewport estimate
+        self.canvas_zoom = ((600.0 / (w + pad * 2.0)).min(400.0 / (h + pad * 2.0))).clamp(0.2, 2.0);
+        self.canvas_pan = vec2(
+            -(min_x - pad) + (600.0 / self.canvas_zoom - w) * 0.5 - pad,
+            -(min_y - pad) + (400.0 / self.canvas_zoom - h) * 0.5 - pad,
+        );
     }
 
     fn draw_tabs(&mut self, ui: &mut egui::Ui) {
@@ -940,26 +1058,36 @@ impl StaxApp {
 
         if response.drag_started() && !alt {
             if let Some(p) = ptr {
+                let mut hit_node = false;
                 for node in self.graph.nodes_in_order() {
                     if node_screen_rects.get(&node.id).is_some_and(|r| r.contains(p)) {
                         self.dragging = Some(node.id);
+                        hit_node = true;
                         break;
                     }
+                }
+                if !hit_node {
+                    // Empty-space drag = pan
+                    self.dragging = None;
                 }
             }
         }
 
-        if response.dragged() && !alt {
+        if response.dragged_by(egui::PointerButton::Primary) && !alt {
             if let Some(drag_id) = self.dragging {
+                // Drag node
                 let canvas_delta = response.drag_delta() / zoom;
                 if let Some(pos) = self.node_positions.get_mut(&drag_id) {
                     pos.x += canvas_delta.x;
                     pos.y += canvas_delta.y;
                 }
+            } else {
+                // Drag empty space → pan canvas
+                self.canvas_pan += response.drag_delta() / self.canvas_zoom;
             }
         }
 
-        if !response.dragged() || alt {
+        if !response.dragged() {
             self.dragging = None;
         }
 
@@ -1063,9 +1191,6 @@ impl StaxApp {
                 }
             }
         }
-
-        // Canvas header overlay
-        crate::graph::draw_canvas_header(&painter, rect, self.view);
 
         // Legend
         crate::graph::draw_legend(&painter, rect);
