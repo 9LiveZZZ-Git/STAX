@@ -209,6 +209,7 @@ pub fn draw_port(painter: &Painter, center: Pos2, kind: &PortKind, zoom: f32) {
 /// Returns `(body_rect, interacts)` where `body_rect` is the node header+sub area
 /// (without scope extension) suitable for drag hit-testing, and `interacts` lists
 /// all clickable badge zones the caller should hit-test each frame.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_node(
     painter: &Painter,
     screen_pos: Pos2,

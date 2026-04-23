@@ -177,7 +177,7 @@ impl StaxApp {
 
                 // ── GRAPH ────────────────────────────────────────────────
                 let nodes: Vec<_> = self.graph.nodes_in_order()
-                    .map(|n| (n.id.0, node_kind_tag(&n.kind), n.label(), n.inputs.len(), n.outputs.len(), n.adverb.clone()))
+                    .map(|n| (n.id.0, node_kind_tag(&n.kind), n.label(), n.inputs.len(), n.outputs.len(), n.adverb))
                     .collect();
                 let edge_count = self.graph.edge_count();
                 section(ui, &format!("GRAPH   ({} nodes,  {} edges)", nodes.len(), edge_count));

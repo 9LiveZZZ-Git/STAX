@@ -1,4 +1,4 @@
-/// D6 — Graphviz DOT export + viewer window.
+//! Graphviz DOT export + viewer window.
 
 use stax_graph::{Graph, PortKind};
 use crate::shell;

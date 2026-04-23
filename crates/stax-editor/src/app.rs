@@ -66,7 +66,7 @@ pub struct StaxApp {
     pub selected_edge: Option<stax_graph::EdgeId>,
     pub dragging: Option<NodeId>,
 
-    // D1: Multi-select via marquee rubber-band
+    // Multi-select via marquee rubber-band
     pub selected_nodes: HashSet<NodeId>,
     pub marquee_start: Option<Pos2>,   // screen-space anchor
     pub marquee_rect:  Option<Rect>,   // screen-space live rect during drag
@@ -79,7 +79,7 @@ pub struct StaxApp {
     pub lib_drag_word: Option<String>,
     pub lib_drag_ghost: Option<Pos2>,
 
-    // D6: DOT viewer
+    // DOT viewer state
     pub show_dot_window: bool,
     pub dot_source: String,
 
@@ -459,8 +459,11 @@ impl StaxApp {
 
     pub fn file_save(&mut self) {
         if let Some(ref path) = self.current_file.clone() {
-            let _ = std::fs::write(path, &self.source);
-            self.source_modified = false;
+            if let Err(e) = std::fs::write(path, &self.source) {
+                eprintln!("stax: save failed: {e}");
+            } else {
+                self.source_modified = false;
+            }
         }
     }
 
@@ -624,7 +627,7 @@ impl StaxApp {
                 .show_separator_line(false).show(ctx, |ui| self.draw_timebar(ui));
         }
 
-        // D6: DOT viewer window (shown as a floating overlay)
+        // DOT viewer window (shown as a floating overlay)
         if self.show_dot_window {
             crate::dot::draw_dot_window(ctx, &mut self.show_dot_window, &mut self.dot_source, &self.graph);
         }
@@ -764,7 +767,7 @@ impl eframe::App for StaxApp {
                 .show(ctx, |ui| self.draw_timebar(ui));
         }
 
-        // D6: DOT viewer window
+        // DOT viewer window
         if self.show_dot_window {
             crate::dot::draw_dot_window(ctx, &mut self.show_dot_window, &mut self.dot_source, &self.graph);
         }
@@ -912,7 +915,7 @@ impl StaxApp {
                     ui.close_menu();
                 }
                 ui.separator();
-                // D6: DOT viewer
+                // DOT viewer
                 if ui.button("show DOT…").clicked() {
                     self.dot_source = crate::dot::graph_to_dot(&self.graph);
                     self.show_dot_window = true;
@@ -1521,7 +1524,7 @@ impl StaxApp {
                         .find(|n| node_screen_rects.get(&n.id).is_some_and(|r| r.contains(p)))
                         .map(|n| n.id);
                     self.dragging = hit;
-                    // D1: Begin marquee when dragging over empty space
+                    // Begin marquee when dragging over empty space
                     if hit.is_none() {
                         self.marquee_start = Some(p);
                         self.marquee_rect  = None;
@@ -1543,7 +1546,7 @@ impl StaxApp {
                     pos.y += canvas_delta.y;
                 }
             } else if let Some(anchor) = self.marquee_start {
-                // D1: Update marquee rect
+                // Update marquee rect
                 if let Some(cur) = ui.input(|i| i.pointer.interact_pos()) {
                     self.marquee_rect = Some(Rect::from_two_pos(anchor, cur));
                 }
@@ -1562,13 +1565,13 @@ impl StaxApp {
                             .map(|pi| stax_graph::PortRef { node: n.id, port: pi })
                     });
                     if let Some(dst_ref) = dst {
-                        if self.graph.add_edge(src_ref, dst_ref).is_ok() {
+                        if self.graph.add_edge(src_ref, dst_ref).is_some() {
                             self.commit_graph_edit();
                         }
                     }
                 }
             }
-            // D1: Collect nodes inside marquee
+            // Collect nodes inside marquee
             if let Some(mrect) = self.marquee_rect.take() {
                 self.selected_nodes.clear();
                 for node in self.graph.nodes_in_order() {
@@ -1594,7 +1597,7 @@ impl StaxApp {
                     .map(|n| n.id);
                 if let Some(nid) = hit_node {
                     if shift {
-                        // D1: Shift+click toggles node in multi-select set
+                        // Shift+click toggles node in multi-select set
                         if self.selected_nodes.contains(&nid) {
                             self.selected_nodes.remove(&nid);
                         } else {
@@ -1796,7 +1799,7 @@ impl StaxApp {
 
         response.context_menu(|ui| {
             if let Some(nid) = ctx_hovered_node {
-                // D5: function info header
+                // Function info header
                 if let Some(node) = self.graph.node(nid) {
                     let label = node.label();
                     if let Some(desc) = crate::graph::word_description(&label) {
@@ -1821,17 +1824,16 @@ impl StaxApp {
                     self.selected_nodes.remove(&nid);
                     self.commit_graph_edit();
                 }
-                if !self.selected_nodes.is_empty() {
-                    if ui.button(format!("Delete {} selected", self.selected_nodes.len())).clicked() {
-                        ui.close_menu();
-                        let to_del: Vec<NodeId> = self.selected_nodes.drain().collect();
-                        for did in &to_del {
-                            self.graph.remove_node(*did);
-                            self.node_positions.remove(did);
-                            if self.selected_node == Some(*did) { self.selected_node = None; }
-                        }
-                        self.commit_graph_edit();
+                if !self.selected_nodes.is_empty()
+                    && ui.button(format!("Delete {} selected", self.selected_nodes.len())).clicked() {
+                    ui.close_menu();
+                    let to_del: Vec<NodeId> = self.selected_nodes.drain().collect();
+                    for did in &to_del {
+                        self.graph.remove_node(*did);
+                        self.node_positions.remove(did);
+                        if self.selected_node == Some(*did) { self.selected_node = None; }
                     }
+                    self.commit_graph_edit();
                 }
                 if ui.button("Disconnect all").clicked() {
                     ui.close_menu();
@@ -1840,16 +1842,15 @@ impl StaxApp {
                     self.commit_graph_edit();
                 }
 
-                // D2: Port-specific ops when a Fun input is hovered
+                // Port-specific ops when a Fun input is hovered
                 if let Some((port_nid, port_idx, kind)) = ctx_hovered_input {
                     if port_nid == nid {
                         ui.separator();
-                        if kind == stax_graph::PortKind::Fun {
-                            if ui.button("View fn body").clicked() {
-                                ui.close_menu();
-                                self.fnport.selected_node = Some(nid);
-                                self.view = crate::app::View::FnPort;
-                            }
+                        if kind == stax_graph::PortKind::Fun
+                            && ui.button("View fn body").clicked() {
+                            ui.close_menu();
+                            self.fnport.selected_node = Some(nid);
+                            self.view = crate::app::View::FnPort;
                         }
                         if ui.button(format!("Disconnect port in:{port_idx}")).clicked() {
                             ui.close_menu();
@@ -1866,7 +1867,7 @@ impl StaxApp {
                 ui.separator();
             }
 
-            // D3: Wire delete when hovering edge but no node
+            // Wire delete when hovering edge but no node
             if ctx_hovered_node.is_none() {
                 if let Some(eid) = ctx_hovered_edge {
                     if ui.button("Delete wire").clicked() {
@@ -1929,7 +1930,7 @@ impl StaxApp {
             if !ui.input(|i| i.pointer.any_down()) {
                 if let Some(ghost_screen) = self.lib_drag_ghost {
                     if rect.contains(ghost_screen) {
-                        // D4: check if dropping onto a Fun input port
+                        // Check if dropping onto a Fun input port
                         let fun_port_target: Option<(NodeId, u8)> =
                             self.graph.nodes_in_order().find_map(|n| {
                                 let sp = self.node_positions.get(&n.id).map(|&p| to_screen(p))?;
@@ -1945,15 +1946,12 @@ impl StaxApp {
                         let world_pos = crate::graph::screen_to_canvas(ghost_screen, pan, zoom, origin);
                         if let Some((dst_nid, dst_port)) = fun_port_target {
                             // Create a quote node [word] and connect it to the Fun port
-                            let qops = stax_parser::parse(&format!("[{}]", word))
-                                .unwrap_or_default();
                             let quote_nid = self.graph.add_word_node(&format!("[{}]", word));
                             let offset_pos = pos2(world_pos.x - 120.0, world_pos.y);
                             self.node_positions.insert(quote_nid, offset_pos);
                             let src_ref = stax_graph::PortRef { node: quote_nid, port: 0 };
                             let dst_ref = stax_graph::PortRef { node: dst_nid,   port: dst_port };
                             let _ = self.graph.add_edge(src_ref, dst_ref);
-                            let _ = qops; // suppress warning
                         } else {
                             let nid = self.graph.add_word_node(word);
                             self.node_positions.insert(nid, world_pos);
@@ -1966,7 +1964,7 @@ impl StaxApp {
             }
         }
 
-        // D1: Draw marquee rect
+        // Draw marquee rect
         if let Some(mrect) = self.marquee_rect {
             let fill = egui::Color32::from_rgba_premultiplied(201, 72, 32, 20);
             painter.rect_filled(mrect, 0.0, fill);

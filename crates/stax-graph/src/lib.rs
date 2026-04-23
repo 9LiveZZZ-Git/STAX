@@ -301,10 +301,10 @@ impl Graph {
         removed
     }
 
-    /// Add an edge; returns Err if `dst` already has a source (no fan-in).
-    pub fn add_edge(&mut self, src: PortRef, dst: PortRef) -> Result<EdgeId, ()> {
-        if self.source_of(dst).is_some() { return Err(()); }
-        Ok(self.connect(src, dst))
+    /// Add an edge; returns `None` if `dst` already has a source (no fan-in).
+    pub fn add_edge(&mut self, src: PortRef, dst: PortRef) -> Option<EdgeId> {
+        if self.source_of(dst).is_some() { return None; }
+        Some(self.connect(src, dst))
     }
 
     /// Remove a single edge by id; returns true if it existed.
@@ -768,7 +768,7 @@ pub fn ops_to_source_text(ops: &[Op]) -> String {
                             Value::Str(s) => { out.push('"'); out.push_str(s); out.push('"'); }
                             Value::Sym(s) => { out.push('\''); out.push_str(s); }
                             Value::Nil    => out.push_str("nil"),
-                            _             => out.push_str("0"),
+                            _             => out.push('0'),
                         }
                     }
                     Op::Word(w) => {
@@ -1220,9 +1220,9 @@ mod tests {
         let p2 = PortRef { node: src2, port: 0 };
         let in0 = PortRef { node: dst, port: 0 };
         // First edge ok
-        assert!(g.add_edge(p1, in0).is_ok());
+        assert!(g.add_edge(p1, in0).is_some());
         // Second edge to same dst port rejected
-        assert!(g.add_edge(p2, in0).is_err());
+        assert!(g.add_edge(p2, in0).is_none());
     }
 
     #[test]

@@ -13,6 +13,10 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use stax_graph::{Graph, NodeId, PortKind};
 use crate::{app::View, app::StaxApp, shell};
 
+/// One level of the fn-port navigation stack:
+/// (parent_node_id, parent_subgraph, parent_positions, parent_pan, parent_zoom)
+type NavEntry = (NodeId, Option<Graph>, HashMap<NodeId, Pos2>, Vec2, f32);
+
 // ── FnPortState ────────────────────────────────────────────────────────────
 
 /// Persistent state for the fn-port detail view. Stored in `StaxApp`.
@@ -33,9 +37,8 @@ pub struct FnPortState {
     pub subgraph_positions: HashMap<NodeId, Pos2>,
     /// The NodeId for which the subgraph was last built (cache key).
     pub subgraph_for: Option<NodeId>,
-    /// D7: Navigation stack for nested MakeFun drill-in.
-    /// Each entry: (parent_node_id, parent_subgraph, parent_positions, parent_pan, parent_zoom)
-    pub nav_stack: Vec<(NodeId, Option<Graph>, HashMap<NodeId, Pos2>, Vec2, f32)>,
+    /// Navigation stack for nested MakeFun drill-in.
+    pub nav_stack: Vec<NavEntry>,
 }
 
 impl Default for FnPortState {
@@ -260,10 +263,8 @@ impl StaxApp {
         painter.rect_filled(canvas_rect, 0.0, shell::SURFACE);
 
         // Dot-grid (clip to canvas rect)
-        let clip_id = ui.id().with("fnport_clip");
-        let clip_rect = canvas_rect;
         {
-            let clip_painter = painter.with_clip_rect(clip_rect);
+            let clip_painter = painter.with_clip_rect(canvas_rect);
             crate::graph::draw_dot_grid(
                 &clip_painter,
                 canvas_rect,
@@ -328,10 +329,9 @@ impl StaxApp {
         // Canvas border
         painter.rect_stroke(canvas_rect, 0.0, Stroke::new(1.0, shell::RULE), StrokeKind::Outside);
 
-        // ── Subgraph interaction (pan/zoom + D7 double-click drill-in) ───────
+        // ── Subgraph interaction (pan/zoom + double-click drill-in) ─────────
 
         let canvas_resp = ui.allocate_rect(canvas_rect, egui::Sense::click_and_drag());
-        let _ = clip_id; // suppress unused warning
 
         if canvas_resp.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
@@ -355,7 +355,7 @@ impl StaxApp {
                 canvas_resp.drag_delta() / self.fnport.subgraph_zoom;
         }
 
-        // D7: Double-click on a MakeFun node in the subgraph drills in.
+        // Double-click on a MakeFun node in the subgraph drills in.
         let dbl = canvas_resp.double_clicked();
         if dbl {
             if let Some(click_pos) = ui.input(|i| i.pointer.interact_pos()) {
@@ -422,7 +422,7 @@ impl StaxApp {
             Stroke::new(1.0, shell::RULE),
         );
 
-        // D7: Build button list dynamically (add "← back" when nav_stack non-empty)
+        // Build button list dynamically (add "← back" when nav_stack non-empty)
         let has_back = !self.fnport.nav_stack.is_empty();
         let mut buttons_vec: Vec<&str> = Vec::new();
         if has_back { buttons_vec.push("← back"); }

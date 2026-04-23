@@ -327,10 +327,9 @@ impl StaxApp {
                 self.file_open_active = true;
                 self.file_open_buf.clear();
             }
-            if let Some(ref path) = self.current_file.clone() {
+            if self.current_file.is_some() {
                 ui.add_space(4.0);
                 if ui.small_button("save").clicked() { self.file_save(); }
-                let _ = path;
             }
         });
 
@@ -415,7 +414,7 @@ impl StaxApp {
 
                 // Did-you-mean with click-to-fix
                 let suggestion = extract_unknown_word(err)
-                    .and_then(|w| best_suggestion(w));
+                    .and_then(best_suggestion);
                 if let Some(s) = suggestion {
                     let err_clone = err.clone();
                     let s_clone = s.to_owned();
@@ -804,7 +803,7 @@ impl StaxApp {
                 if line == err_line {
                     let sq_x = editor_rect.min.x + (err_col.saturating_sub(1)) as f32 * CHAR_W;
                     let sq_w = CHAR_W * 6.0; // approximate token width
-                    draw_squiggle(&ui.painter(), egui::pos2(sq_x, row_top + ROW_H - 2.0), sq_w, shell::ERR);
+                    draw_squiggle(ui.painter(), egui::pos2(sq_x, row_top + ROW_H - 2.0), sq_w, shell::ERR);
                 }
             }
         }
