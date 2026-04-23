@@ -404,6 +404,72 @@ pub fn draw_canvas_header(painter: &Painter, rect: Rect, view: crate::app::View)
     }
 }
 
+// ── Wire hit-testing and ghost drawing ────────────────────────────────────────
+
+/// Convert a screen position to canvas (world) coordinates.
+pub fn screen_to_canvas(screen: egui::Pos2, pan: Vec2, zoom: f32, origin: egui::Pos2) -> egui::Pos2 {
+    let rel = screen - origin;
+    pos2(rel.x / zoom - pan.x, rel.y / zoom - pan.y)
+}
+
+/// Sample 24 points along the cubic bezier; return true if any point is within
+/// `8.0 / zoom` pixels of `target`.
+pub fn bezier_hit_test(from: Pos2, to: Pos2, target: Pos2, zoom: f32) -> bool {
+    let dy = ((to.y - from.y).abs() * 0.5).max(40.0 * zoom);
+    let c1 = pos2(from.x, from.y + dy);
+    let c2 = pos2(to.x, to.y - dy);
+    let threshold = (8.0 / zoom).max(4.0);
+    for i in 0..=24 {
+        let t = i as f32 / 24.0;
+        let u = 1.0 - t;
+        let pt = pos2(
+            u*u*u*from.x + 3.0*u*u*t*c1.x + 3.0*u*t*t*c2.x + t*t*t*to.x,
+            u*u*u*from.y + 3.0*u*u*t*c1.y + 3.0*u*t*t*c2.y + t*t*t*to.y,
+        );
+        if (pt - target).length() < threshold { return true; }
+    }
+    false
+}
+
+/// Return the port index on a node that is closest to `screen_pos` and within
+/// twice PORT_HALF * zoom, for either inputs (`is_output=false`) or outputs.
+pub fn port_at_screen(
+    screen_pos: Pos2,
+    node: &stax_graph::Node,
+    node_screen: Pos2,
+    zoom: f32,
+    is_output: bool,
+) -> Option<u8> {
+    let port_count = if is_output { node.outputs.len() } else { node.inputs.len() };
+    let threshold = shell::PORT_HALF * zoom * 2.5;
+    for i in 0..port_count {
+        let center = port_screen_pos(node_screen, node, i as u8, is_output);
+        if (center - screen_pos).length() < threshold {
+            return Some(i as u8);
+        }
+    }
+    None
+}
+
+/// Draw a dashed ghost wire (in-progress connection preview).
+pub fn draw_wire_ghost(painter: &Painter, from: Pos2, to: Pos2, zoom: f32) {
+    let dy = ((to.y - from.y).abs() * 0.5).max(40.0 * zoom);
+    let c1 = pos2(from.x, from.y + dy);
+    let c2 = pos2(to.x, to.y - dy);
+    let pts: Vec<Pos2> = (0..=24).map(|i| {
+        let t = i as f32 / 24.0;
+        let u = 1.0 - t;
+        pos2(
+            u*u*u*from.x + 3.0*u*u*t*c1.x + 3.0*u*t*t*c2.x + t*t*t*to.x,
+            u*u*u*from.y + 3.0*u*u*t*c1.y + 3.0*u*t*t*c2.y + t*t*t*to.y,
+        )
+    }).collect();
+    let stroke = egui::Stroke::new(1.5, shell::INK_2);
+    for chunk in pts.windows(2).enumerate().filter_map(|(i, s)| if i % 2 == 0 { Some(s) } else { None }) {
+        painter.line_segment([chunk[0], chunk[1]], stroke);
+    }
+}
+
 /// Port-type legend in the bottom-left of the canvas.
 pub fn draw_legend(painter: &Painter, rect: Rect) {
     let entries: &[(&str, PortKind)] = &[

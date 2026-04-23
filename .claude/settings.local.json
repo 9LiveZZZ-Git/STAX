@@ -25,7 +25,18 @@
       "Bash(gh auth *)",
       "Bash(gh repo *)",
       "Bash(git config *)",
-      "Bash(git --version)"
+      "Bash(git --version)",
+      "Bash(awk '-F[. ;]' '{for\\(i=1;i<=NF;i++\\) if\\($i ~ /^[0-9]+$/ && $\\(i-1\\)==\"ok\"\\) total+=$i} END {print \"total passed:\", total}')",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(cargo build *)",
+      "Bash(git push *)",
+      "Bash(Start-Process *)",
+      "Bash(cmd *)",
+      "PowerShell(Start-Process \"C:\\\\stax-target\\\\release\\\\stax-editor.exe\" -WorkingDirectory \"C:\\\\Users\\\\lpfre\\\\AppData\\\\Roaming\\\\Claude\\\\local-agent-mode-sessions\\\\17dc9ad6-3c5d-4bbc-807c-b050a0df91f2\\\\1edca914-8280-4b53-a35e-c10e2cb628d8\\\\local_6b8ca2a2-ad4f-4bc3-8a1d-dfa810802929\\\\outputs\\\\scratch\\\\stax\")",
+      "PowerShell($p = Start-Process \"C:\\\\stax-target\\\\release\\\\stax-editor.exe\" -PassThru -Wait -WorkingDirectory \"C:\\\\Users\\\\lpfre\\\\AppData\\\\Roaming\\\\Claude\\\\local-agent-mode-sessions\\\\17dc9ad6-3c5d-4bbc-807c-b050a0df91f2\\\\1edca914-8280-4b53-a35e-c10e2cb628d8\\\\local_6b8ca2a2-ad4f-4bc3-8a1d-dfa810802929\\\\outputs\\\\scratch\\\\stax\"; \"ExitCode: $\\($p.ExitCode\\)\")",
+      "PowerShell($env:RUST_BACKTRACE = \"1\"; $output = & \"C:\\\\stax-target\\\\release\\\\stax-editor.exe\" 2>&1; \"ExitCode: $LASTEXITCODE\"; $output)",
+      "Bash(awk -F' ' '{s+=$1} END {print s \" total tests passed\"}')"
     ]
   }
 }

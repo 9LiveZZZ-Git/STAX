@@ -280,6 +280,56 @@ impl Graph {
         }
         out
     }
+
+    // ── Editor mutation methods ───────────────────────────────────────────────
+
+    /// Add a word node using the built-in arity table; returns the new node's id.
+    pub fn add_word_node(&mut self, word: &str) -> NodeId {
+        let (n_pops, n_pushes) = word_arity(word);
+        self.add_node(NodeKind::Word(Arc::from(word)), n_pops, n_pushes)
+    }
+
+    /// Remove a node and all incident edges; returns the removed edge ids.
+    pub fn remove_node(&mut self, id: NodeId) -> Vec<EdgeId> {
+        let removed: Vec<EdgeId> = self.edges.iter()
+            .filter(|e| e.src.node == id || e.dst.node == id)
+            .map(|e| e.id)
+            .collect();
+        self.edges.retain(|e| e.src.node != id && e.dst.node != id);
+        self.nodes.remove(&id);
+        self.node_order.retain(|&nid| nid != id);
+        removed
+    }
+
+    /// Add an edge; returns Err if `dst` already has a source (no fan-in).
+    pub fn add_edge(&mut self, src: PortRef, dst: PortRef) -> Result<EdgeId, ()> {
+        if self.source_of(dst).is_some() { return Err(()); }
+        Ok(self.connect(src, dst))
+    }
+
+    /// Remove a single edge by id; returns true if it existed.
+    pub fn remove_edge(&mut self, id: EdgeId) -> bool {
+        let before = self.edges.len();
+        self.edges.retain(|e| e.id != id);
+        self.edges.len() < before
+    }
+
+    /// All edge ids incident to a node (either end).
+    pub fn edges_of(&self, nid: NodeId) -> Vec<EdgeId> {
+        self.edges.iter()
+            .filter(|e| e.src.node == nid || e.dst.node == nid)
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// Lower the graph to stax source text.
+    ///
+    /// After any editor mutation, call this and store the result as the
+    /// canonical source string, then recompile.
+    pub fn lower_to_source(&self) -> String {
+        let ops = lower(self);
+        ops_to_source_text(&ops)
+    }
 }
 
 // ── Arity table ──────────────────────────────────────────────────────────────
@@ -667,6 +717,109 @@ pub fn topo_sort(g: &Graph) -> Vec<NodeId> {
     result
 }
 
+// ── Source text emission ──────────────────────────────────────────────────────
+
+fn adverb_suffix(adv: &Adverb) -> &'static str {
+    match adv {
+        Adverb::Reduce   => "/",
+        Adverb::Scan     => "\\",
+        Adverb::Pairwise => "^",
+    }
+}
+
+/// Convert a flat `Vec<Op>` to canonical stax source text.
+///
+/// Handles all op types produced by `lower()`. Used by `Graph::lower_to_source`
+/// and exposed pub so stax-editor can reuse it.
+pub fn ops_to_source_text(ops: &[Op]) -> String {
+    // Pre-scan: which ListMark indices are signal (#[) lists?
+    let mut mark_stk: Vec<usize> = Vec::new();
+    let mut sig_marks = std::collections::HashSet::new();
+    for (i, op) in ops.iter().enumerate() {
+        match op {
+            Op::ListMark => mark_stk.push(i),
+            Op::MakeList { signal } => {
+                if let Some(m) = mark_stk.pop() {
+                    if *signal { sig_marks.insert(m); }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut out = String::new();
+    let mut pending_adv: Option<Adverb> = None;
+
+    for (i, op) in ops.iter().enumerate() {
+        match op {
+            Op::Adverb(adv) => { pending_adv = Some(*adv); }
+            _ => {
+                if !out.is_empty() { out.push(' '); }
+                match op {
+                    Op::Lit(v) => {
+                        match v {
+                            Value::Real(x) => {
+                                if *x == x.floor() && x.abs() < 1_000_000.0 {
+                                    out.push_str(&format!("{}", *x as i64));
+                                } else {
+                                    out.push_str(&format!("{x}"));
+                                }
+                            }
+                            Value::Str(s) => { out.push('"'); out.push_str(s); out.push('"'); }
+                            Value::Sym(s) => { out.push('\''); out.push_str(s); }
+                            Value::Nil    => out.push_str("nil"),
+                            _             => out.push_str("0"),
+                        }
+                    }
+                    Op::Word(w) => {
+                        out.push_str(w);
+                        if let Some(adv) = pending_adv.take() {
+                            out.push_str(adverb_suffix(&adv));
+                        }
+                    }
+                    Op::ListMark  => out.push_str(if sig_marks.contains(&i) { "#[" } else { "[" }),
+                    Op::MakeList { .. } => out.push(']'),
+                    Op::Bind(n) => { out.push_str("= "); out.push_str(n); }
+                    Op::BindMany { names, list_mode } => {
+                        let (l, r) = if *list_mode { ("[", "]") } else { ("(", ")") };
+                        out.push_str("= "); out.push_str(l);
+                        for (j, n) in names.iter().enumerate() {
+                            if j > 0 { out.push(' '); }
+                            out.push_str(n);
+                        }
+                        out.push_str(r);
+                    }
+                    Op::Quote(n)      => { out.push('`'); out.push_str(n); }
+                    Op::Sym(n)        => { out.push('\''); out.push_str(n); }
+                    Op::Call          => out.push('!'),
+                    Op::FormGet(n)    => { out.push(','); out.push_str(n); }
+                    Op::FormApply(n)  => { out.push('.'); out.push_str(n); }
+                    Op::MakeForm { keys, .. } => {
+                        out.push('{');
+                        for (j, k) in keys.iter().enumerate() {
+                            if j > 0 { out.push(' '); }
+                            out.push(':'); out.push_str(k);
+                        }
+                        out.push('}');
+                    }
+                    Op::MakeFun { params, body } => {
+                        out.push('\\');
+                        let ps: Vec<&str> = params.iter().map(|s| s.as_ref()).collect();
+                        if !ps.is_empty() { out.push_str(&ps.join(" ")); out.push(' '); }
+                        out.push('[');
+                        out.push_str(&ops_to_source_text(body));
+                        out.push(']');
+                    }
+                    Op::Each { .. } => {}
+                    Op::Adverb(_) => unreachable!("handled above"),
+                }
+                pending_adv = None;
+            }
+        }
+    }
+    out
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1026,5 +1179,70 @@ mod tests {
         let r1  = run_ops(&ops);
         let r2  = run_ops(&lower(&lift(&ops)));
         assert_eq!(r1.len(), r2.len());
+    }
+
+    // ── A6: mutation methods ──────────────────────────────────────────────────
+
+    #[test]
+    fn add_word_node_adds_to_order() {
+        let mut g = Graph::new();
+        let before = g.node_count();
+        let nid = g.add_word_node("neg");
+        assert_eq!(g.node_count(), before + 1);
+        assert!(g.node(nid).is_some());
+        // Node should appear in node_order
+        let order = topo_sort(&g);
+        assert!(order.contains(&nid));
+    }
+
+    #[test]
+    fn remove_node_removes_incident_edges() {
+        let mut g = lift(&parse("2 3 +").unwrap());
+        assert_eq!(g.edge_count(), 2);
+        // Find the + node
+        let plus_id = g.nodes_in_order()
+            .find(|n| matches!(&n.kind, NodeKind::Word(w) if w.as_ref() == "+"))
+            .map(|n| n.id)
+            .unwrap();
+        let removed = g.remove_node(plus_id);
+        assert_eq!(removed.len(), 2, "should have removed both incident edges");
+        assert_eq!(g.edge_count(), 0);
+        assert!(g.node(plus_id).is_none());
+    }
+
+    #[test]
+    fn add_edge_rejects_duplicate_dst() {
+        let mut g = Graph::new();
+        let src1 = g.add_node(NodeKind::Literal(Value::Real(1.0)), 0, 1);
+        let src2 = g.add_node(NodeKind::Literal(Value::Real(2.0)), 0, 1);
+        let dst  = g.add_node(NodeKind::Word(Arc::from("+")), 2, 1);
+        let p1 = PortRef { node: src1, port: 0 };
+        let p2 = PortRef { node: src2, port: 0 };
+        let in0 = PortRef { node: dst, port: 0 };
+        // First edge ok
+        assert!(g.add_edge(p1, in0).is_ok());
+        // Second edge to same dst port rejected
+        assert!(g.add_edge(p2, in0).is_err());
+    }
+
+    #[test]
+    fn remove_edge_by_id() {
+        let mut g = lift(&parse("2 3 +").unwrap());
+        assert_eq!(g.edge_count(), 2);
+        let eid = g.edges()[0].id;
+        assert!(g.remove_edge(eid));
+        assert_eq!(g.edge_count(), 1);
+        assert!(!g.remove_edge(eid), "second removal should return false");
+    }
+
+    #[test]
+    fn lower_to_source_produces_parseable_text() {
+        let g = lift(&parse("2 3 +").unwrap());
+        let src = g.lower_to_source();
+        let reparsed = stax_parser::parse(&src);
+        assert!(reparsed.is_ok(), "lower_to_source produced unparseable text: {:?}", src);
+        // Source should contain the tokens
+        assert!(src.contains('2') || src.contains("2"), "missing 2 in: {src}");
+        assert!(src.contains('+'), "missing + in: {src}");
     }
 }
