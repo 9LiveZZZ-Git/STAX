@@ -19,7 +19,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA / JACK headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+          sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
       - name: cargo check
         run: cargo check --workspace
 
@@ -31,7 +34,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA / JACK headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+          sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
       - name: cargo test
         run: cargo test --workspace
 
@@ -45,7 +51,10 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA / JACK headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+          sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
       - name: cargo clippy
         run: cargo clippy --workspace -- -D warnings
 
@@ -81,7 +90,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA / JACK headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+          sudo apt-get install -y libjack-dev || sudo apt-get install -y libjack-jackd2-dev || true
 
       - name: "M1 — 365/365 SAPF unit tests"
         run: |
