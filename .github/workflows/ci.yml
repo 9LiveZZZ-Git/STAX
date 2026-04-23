@@ -179,7 +179,7 @@ jobs:
         run: |
           cargo test -p stax-dsp 2>&1 | tee /tmp/m3.txt
           grep -E "^test result" /tmp/m3.txt
-          PASSED=$(grep -oP '\d+ passed' /tmp/m3.txt | grep -oP '\d+' | tail -1)
+          PASSED=$(grep -oP '\d+ passed' /tmp/m3.txt | grep -oP '\d+' | awk '{s+=$1}END{print s}')
           echo "stax-dsp tests passed: $PASSED"
           [ "$PASSED" -ge "6" ] || { echo "M3 FAIL: expected ≥6 stax-dsp tests, got $PASSED"; exit 1; }
 
