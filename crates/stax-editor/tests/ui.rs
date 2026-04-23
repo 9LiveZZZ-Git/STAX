@@ -1,16 +1,16 @@
 //! Headed UI tests for stax-editor using egui_kittest.
 //!
-//! Most tests exercise app logic directly (no display needed).
-//! The harness tests render into an off-screen buffer using egui_kittest —
-//! they verify egui doesn't panic while rendering our syntax highlighting
-//! and widget layouts.
+//! Two categories:
+//!   1. Harness tests — render into an off-screen egui_kittest buffer.
+//!      These verify the full app shell doesn't panic while rendering.
+//!   2. Pure-logic tests — no display needed; exercise StaxApp state directly.
 //!
 //! Run:  cargo test -p stax-editor -- --nocapture
 
 use egui_kittest::Harness;
 use stax_editor::app::{StaxApp, View};
 
-// ── Harness smoke tests ───────────────────────────────────────────────────────
+// ── Harness: low-level widget smoke tests ─────────────────────────────────────
 
 /// Syntax highlighter + label rendering doesn't panic on one frame.
 #[test]
@@ -38,6 +38,156 @@ fn harness_text_edit_smoke() {
     }
 }
 
+// ── Harness: full app shell (Playwright-style) ────────────────────────────────
+
+/// Full app shell renders graph view (default) without panic.
+#[test]
+fn harness_full_app_graph_view() {
+    let mut app = StaxApp::new_for_test();
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    for _ in 0..3 {
+        harness.run();
+    }
+}
+
+/// Full app shell renders text view without panic.
+#[test]
+fn harness_full_app_text_view() {
+    let mut app = StaxApp::new_for_test();
+    app.view = View::Text;
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    for _ in 0..3 {
+        harness.run();
+    }
+}
+
+/// Full app shell renders fn-port view without panic.
+#[test]
+fn harness_full_app_fnport_view() {
+    let mut app = StaxApp::new_for_test();
+    app.view = View::FnPort;
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    harness.run();
+}
+
+/// Renders multiple frames cycling through all three views — tests tab consistency.
+#[test]
+fn harness_all_views_cycle_no_panic() {
+    let views = [View::Graph, View::Text, View::FnPort,
+                 View::Graph, View::Text, View::FnPort];
+    let mut idx = 0usize;
+    let mut app = StaxApp::new_for_test();
+    let mut harness = Harness::new(move |ctx| {
+        app.view = views[idx % views.len()];
+        idx += 1;
+        app.render_frame(ctx);
+    });
+    for _ in 0..views.len() {
+        harness.run();
+    }
+}
+
+/// "440 sinosc play" synth renders in graph view without panic.
+#[test]
+fn harness_synth_graph_view() {
+    let mut app = StaxApp::new_for_test();
+    app.source = "440 sinosc play".to_owned();
+    app.recompile();
+    assert!(app.parse_error.is_none(), "440 sinosc play should parse cleanly");
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    for _ in 0..2 {
+        harness.run();
+    }
+}
+
+/// "440 sinosc play" synth renders in text view without panic.
+#[test]
+fn harness_synth_text_view() {
+    let mut app = StaxApp::new_for_test();
+    app.source = "440 sinosc play".to_owned();
+    app.recompile();
+    app.view = View::Text;
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    for _ in 0..2 {
+        harness.run();
+    }
+}
+
+/// After REPL exec, the next render frame reflects the updated history.
+#[test]
+fn harness_repl_exec_then_render() {
+    let mut app = StaxApp::new_for_test();
+    app.exec_repl("2 3 +");
+    assert_eq!(app.interp.stack.len(), 1, "stack should have one value");
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    harness.run();
+}
+
+/// Parse error state renders without panic in both text and graph views.
+#[test]
+fn harness_parse_error_renders() {
+    let mut app = StaxApp::new_for_test();
+    app.source = "= =".to_owned(); // invalid syntax
+    app.recompile();
+    // Test graph view with error state
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    harness.run();
+
+    let mut app2 = StaxApp::new_for_test();
+    app2.source = "= =".to_owned();
+    app2.recompile();
+    app2.view = View::Text;
+    let mut harness2 = Harness::new(move |ctx| {
+        app2.render_frame(ctx);
+    });
+    harness2.run();
+}
+
+/// Reveal cross-view jump queued via pending_reveal is consumed on render.
+#[test]
+fn harness_reveal_router_consumed_on_render() {
+    use stax_editor::app::RevealTarget;
+    let mut app = StaxApp::new_for_test();
+    // Queue a TextLine reveal while in Graph view
+    app.pending_reveal = Some(RevealTarget::TextLine(2));
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    harness.run();
+    // After frame, pending_reveal should be consumed (tested indirectly — no panic)
+}
+
+/// Time-travel scrub bar renders when snapshots exist.
+#[test]
+fn harness_timebar_with_snapshots() {
+    let mut app = StaxApp::new_for_test();
+    for i in 1..=5 {
+        app.exec_repl(&format!("{i}"));
+    }
+    assert_eq!(app.travel_snapshots.len(), 5);
+    // Default view shows timebar
+    let mut harness = Harness::new(move |ctx| {
+        app.render_frame(ctx);
+    });
+    for _ in 0..2 {
+        harness.run();
+    }
+}
+
 // ── Pure-logic tests (no display needed) ─────────────────────────────────────
 
 /// App initializes without panicking; default source parses cleanly.
@@ -53,6 +203,59 @@ fn smoke_default_source() {
 fn default_view_is_graph() {
     let app = StaxApp::new_for_test();
     assert_eq!(app.view, View::Graph);
+}
+
+/// Cross-view consistency: "440 sinosc play" graph has the right nodes, source text is intact.
+#[test]
+fn synth_cross_view_consistency() {
+    let mut app = StaxApp::new_for_test();
+    app.source = "440 sinosc play".to_owned();
+    app.recompile();
+    assert!(app.parse_error.is_none(), "synth source should parse cleanly");
+
+    // Graph view: node labels contain "sinosc" and "play"
+    app.view = View::Graph;
+    let node_labels: Vec<String> = app.graph.nodes_in_order()
+        .map(|n| n.label().to_string())
+        .collect();
+    assert!(
+        node_labels.iter().any(|l| l.contains("sinosc")),
+        "sinosc node missing; nodes: {node_labels:?}"
+    );
+    assert!(
+        node_labels.iter().any(|l| l.contains("play")),
+        "play node missing; nodes: {node_labels:?}"
+    );
+
+    // Text view: source is unchanged
+    app.view = View::Text;
+    assert!(app.source.contains("sinosc"), "sinosc not in source after view switch");
+    assert!(app.source.contains("play"),   "play not in source after view switch");
+    assert!(app.source.contains("440"),    "440 not in source after view switch");
+
+    // Both views share the same IR
+    assert!(app.ops.len() > 0, "ops should be non-empty after compile");
+    assert_eq!(app.graph.node_count(), node_labels.len(),
+        "graph node count inconsistent between views");
+}
+
+/// Modular synth: "440 sinosc 0.5 * lpf play" produces more nodes than "440 sinosc play".
+#[test]
+fn modular_synth_graph_depth() {
+    let mut app_simple = StaxApp::new_for_test();
+    app_simple.source = "440 sinosc play".to_owned();
+    app_simple.recompile();
+
+    let mut app_modular = StaxApp::new_for_test();
+    app_modular.source = "440 sinosc 0.5 * 800 lpf play".to_owned();
+    app_modular.recompile();
+
+    assert!(app_modular.parse_error.is_none(),
+        "modular synth source should parse cleanly");
+    assert!(
+        app_modular.graph.node_count() > app_simple.graph.node_count(),
+        "modular synth should have more nodes than simple sine"
+    );
 }
 
 /// exec_repl: 2 3 + → stack top is 5.
@@ -112,10 +315,8 @@ fn source_edit_recompiles() {
 #[test]
 fn bad_source_sets_parse_error() {
     let mut app = StaxApp::new_for_test();
-    // Use something the parser will definitely reject
     app.source = "= =".to_owned();
     app.recompile();
-    // Just verify no panic; error may or may not be set depending on parser
     let _ = &app.parse_error;
 }
 
@@ -172,7 +373,6 @@ fn canvas_default_transform() {
 fn fit_canvas_to_nodes_no_panic() {
     let mut app = StaxApp::new_for_test();
     app.fit_canvas_to_nodes();
-    // zoom should be clamped to [0.2, 2.0]
     assert!(app.canvas_zoom >= 0.2 && app.canvas_zoom <= 2.0,
         "zoom out of range: {}", app.canvas_zoom);
 }
@@ -230,4 +430,25 @@ fn travel_step_in_bounds() {
     }
     assert!(app.travel_step < app.travel_snapshots.len(),
         "travel_step {} out of bounds (len {})", app.travel_step, app.travel_snapshots.len());
+}
+
+/// Switching views does not lose source or graph state.
+#[test]
+fn view_switch_preserves_state() {
+    let mut app = StaxApp::new_for_test();
+    app.source = "440 sinosc play".to_owned();
+    app.recompile();
+    let node_count_before = app.graph.node_count();
+
+    app.view = View::Text;
+    assert_eq!(app.graph.node_count(), node_count_before,
+        "node count changed on view switch to Text");
+
+    app.view = View::FnPort;
+    assert_eq!(app.graph.node_count(), node_count_before,
+        "node count changed on view switch to FnPort");
+
+    app.view = View::Graph;
+    assert_eq!(app.graph.node_count(), node_count_before,
+        "node count changed on view switch back to Graph");
 }

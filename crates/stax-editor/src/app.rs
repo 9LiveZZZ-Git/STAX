@@ -327,6 +327,84 @@ impl StaxApp {
 
 // ── eframe::App ────────────────────────────────────────────────────────────
 
+impl StaxApp {
+    /// Render a complete UI frame into `ctx` without needing `eframe::Frame`.
+    /// Used by headed tests so they can drive the full app shell via egui_kittest.
+    pub fn render_frame(&mut self, ctx: &egui::Context) {
+        self.anim_t = ctx.input(|i| i.time as f32);
+
+        // Consume pending reveal
+        if let Some(target) = self.pending_reveal.take() {
+            match target {
+                RevealTarget::GraphNode(nid) => {
+                    self.view = View::Graph;
+                    self.selected_node = Some(nid);
+                    if let Some(&pos) = self.node_positions.get(&nid) {
+                        self.canvas_pan = -vec2(pos.x - 200.0, pos.y - 200.0);
+                    }
+                }
+                RevealTarget::TextLine(line) => {
+                    self.view = View::Text;
+                    self.cursor_line = line;
+                    self.cursor_stack_line = 0;
+                }
+            }
+        }
+
+        let frame_none = egui::Frame::new()
+            .fill(shell::PAPER)
+            .inner_margin(egui::Margin::ZERO);
+
+        egui::TopBottomPanel::top("rf_header")
+            .exact_height(shell::HEADER_H).frame(frame_none.fill(shell::PAPER))
+            .show_separator_line(false).show(ctx, |ui| self.draw_header(ui));
+
+        egui::TopBottomPanel::top("rf_tabs")
+            .exact_height(shell::TABS_H).frame(frame_none.fill(shell::PAPER_2))
+            .show_separator_line(false).show(ctx, |ui| self.draw_tabs(ui));
+
+        egui::TopBottomPanel::bottom("rf_botbar")
+            .exact_height(shell::BOTBAR_H).frame(frame_none.fill(shell::PAPER))
+            .show_separator_line(false).show(ctx, |ui| self.draw_botbar(ui));
+
+        if matches!(self.view, View::Graph | View::FnPort) {
+            egui::TopBottomPanel::bottom("rf_repl")
+                .exact_height(shell::REPL_H).frame(frame_none)
+                .show_separator_line(false).show(ctx, |ui| self.draw_graph_repl(ui));
+            egui::TopBottomPanel::bottom("rf_timebar")
+                .exact_height(shell::TIMEBAR_H).frame(frame_none)
+                .show_separator_line(false).show(ctx, |ui| self.draw_timebar(ui));
+        }
+
+        match self.view {
+            View::Graph => {
+                egui::SidePanel::left("rf_lib").exact_width(shell::LIB_W).frame(frame_none)
+                    .show_separator_line(false).show(ctx, |ui| self.draw_library(ui));
+                egui::SidePanel::right("rf_insp").exact_width(shell::INSP_W).frame(frame_none)
+                    .show_separator_line(false).show(ctx, |ui| self.draw_inspector(ui));
+                egui::CentralPanel::default().frame(frame_none)
+                    .show(ctx, |ui| self.draw_graph_canvas(ui));
+            }
+            View::FnPort => {
+                egui::SidePanel::left("rf_lib").exact_width(shell::LIB_W).frame(frame_none)
+                    .show_separator_line(false).show(ctx, |ui| self.draw_library(ui));
+                egui::SidePanel::right("rf_insp").exact_width(shell::INSP_W).frame(frame_none)
+                    .show_separator_line(false).show(ctx, |ui| self.draw_inspector(ui));
+                egui::CentralPanel::default().frame(frame_none)
+                    .show(ctx, |ui| self.draw_fnport_view(ui));
+            }
+            View::Text => {
+                egui::SidePanel::left("rf_files").exact_width(shell::LIB_W).frame(frame_none)
+                    .show_separator_line(false).show(ctx, |ui| self.draw_files_panel(ui));
+                egui::SidePanel::right("rf_side").exact_width(shell::SIDE_W).frame(frame_none)
+                    .show_separator_line(false).show(ctx, |ui| self.draw_text_side(ui));
+                egui::CentralPanel::default().frame(frame_none)
+                    .show(ctx, |ui| self.draw_text_editor(ui));
+            }
+        }
+    }
+}
+
 impl eframe::App for StaxApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("cpx", self.canvas_pan.x.to_string());
@@ -861,12 +939,14 @@ impl StaxApp {
                 // Fill up to current step
                 let fill_w = track.width() * (step as f32 / (total - 1) as f32);
                 let fill = Rect::from_min_size(track.min, vec2(fill_w, track.height()));
-                bar_painter.rect_filled(fill, 0.0, shell::INK_2);
+                bar_painter.rect_filled(fill, 0.0, shell::RULE_2);
 
-                // Draggable thumb
-                let thumb_x = track.min.x + fill_w;
-                let thumb = Rect::from_center_size(pos2(thumb_x, track.center().y), vec2(6.0, 12.0));
-                bar_painter.rect_filled(thumb, 0.0, shell::INK);
+                // Playhead: 1.5px WARM vertical line (spec: "border: WARM")
+                let head_x = track.min.x + fill_w;
+                bar_painter.line_segment(
+                    [pos2(head_x, br.min.y + 2.0), pos2(head_x, br.max.y - 2.0)],
+                    Stroke::new(1.5, shell::WARM),
+                );
 
                 if bar_resp.dragged() {
                     if let Some(pos) = bar_resp.interact_pointer_pos() {

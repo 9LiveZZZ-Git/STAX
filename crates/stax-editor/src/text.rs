@@ -117,7 +117,7 @@ impl StaxApp {
                     ui.add_space(18.0);
                     ui.label(
                         egui::RichText::new(format!("✕  {msg}"))
-                            .color(shell::WARM)
+                            .color(shell::ERR)
                             .size(11.0)
                             .monospace(),
                     );
@@ -171,11 +171,11 @@ impl StaxApp {
             Stroke::new(0.5, shell::RULE_2),
         );
 
-        // 3px WARM left border on breadcrumb when there is a parse error
+        // 3px ERR left border on breadcrumb when there is a parse error
         if self.parse_error.is_some() {
             ui.painter().line_segment(
                 [bc_rect.left_top(), bc_rect.left_bottom()],
-                Stroke::new(3.0, shell::WARM),
+                Stroke::new(3.0, shell::ERR),
             );
         }
 
@@ -293,9 +293,9 @@ impl StaxApp {
                 vec2(GUTTER_W, ROW_H),
             );
 
-            // Active line highlight
+            // Active line highlight: SURFACE fill + WARM left accent
             if line == self.cursor_line {
-                ui.painter().rect_filled(row_rect, 0.0, shell::PAPER);
+                ui.painter().rect_filled(row_rect, 0.0, shell::SURFACE);
                 ui.painter().line_segment(
                     [row_rect.left_top(), row_rect.left_bottom()],
                     Stroke::new(2.0, shell::WARM),
@@ -317,7 +317,7 @@ impl StaxApp {
             let r = te_resp.rect;
             ui.painter().line_segment(
                 [r.left_bottom(), r.right_bottom()],
-                Stroke::new(1.0, shell::WARM),
+                Stroke::new(1.0, shell::ERR),
             );
         }
 

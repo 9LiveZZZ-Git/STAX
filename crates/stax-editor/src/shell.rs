@@ -11,6 +11,8 @@ pub const INK_2:       Color32 = Color32::from_rgb(0x6b, 0x65, 0x58);
 pub const INK_3:       Color32 = Color32::from_rgb(0x9a, 0x93, 0x83);
 pub const WARM:        Color32 = Color32::from_rgb(0xc9, 0x48, 0x20);
 pub const COOL:        Color32 = Color32::from_rgb(0x2d, 0x5a, 0x4a);
+/// Error/diagnostic red — distinct from WARM; matches design --err: #b03a2e
+pub const ERR:         Color32 = Color32::from_rgb(0xb0, 0x3a, 0x2e);
 
 // Port colors — identical to design tokens; appear nowhere else in the UI
 pub const PORT_REAL:   Color32 = Color32::from_rgb(0x1a, 0x1a, 0x1a);
