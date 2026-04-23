@@ -31,7 +31,12 @@ pub enum FunctionBody {
 
 impl Function {
     pub fn user(params: Vec<Arc<str>>, body: Arc<[Op]>) -> Self {
-        Self { params, help: None, body: FunctionBody::User(body), captured: Vec::new() }
+        Self {
+            params,
+            help: None,
+            body: FunctionBody::User(body),
+            captured: Vec::new(),
+        }
     }
 
     pub fn native<F>(params: Vec<Arc<str>>, f: F) -> Self

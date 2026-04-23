@@ -22,7 +22,9 @@ pub type Secs = f32;
 
 #[inline(always)]
 fn lcg_next(seed: &mut u64) -> f32 {
-    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *seed = seed
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     // Map upper 32 bits to [-1, 1). `>> 32` yields a 32-bit value [0, 2^32-1];
     // dividing by u32::MAX gives [0, 1], then * 2 - 1 gives [-1, 1].
     // (Bug was `>> 33` which only uses 31 bits, capping the ratio at ~0.5
@@ -50,10 +52,16 @@ pub struct SinOsc {
 
 impl SinOsc {
     pub fn new(freq_hz: f32) -> Self {
-        Self { freq_hz, initial_phase: 0.0 }
+        Self {
+            freq_hz,
+            initial_phase: 0.0,
+        }
     }
     pub fn with_phase(freq_hz: f32, initial_phase: f32) -> Self {
-        Self { freq_hz, initial_phase }
+        Self {
+            freq_hz,
+            initial_phase,
+        }
     }
 }
 
@@ -76,7 +84,9 @@ impl SignalInstance for SinOscInstance {
         for s in out.iter_mut() {
             *s = self.phase.sin();
             self.phase += self.phase_inc;
-            if self.phase > TAU { self.phase -= TAU; }
+            if self.phase > TAU {
+                self.phase -= TAU;
+            }
         }
     }
 }
@@ -90,8 +100,18 @@ pub struct SawOsc {
 }
 
 impl SawOsc {
-    pub fn new(freq_hz: f32) -> Self { Self { freq_hz, initial_phase: 0.0 } }
-    pub fn with_phase(freq_hz: f32, initial_phase: f32) -> Self { Self { freq_hz, initial_phase } }
+    pub fn new(freq_hz: f32) -> Self {
+        Self {
+            freq_hz,
+            initial_phase: 0.0,
+        }
+    }
+    pub fn with_phase(freq_hz: f32, initial_phase: f32) -> Self {
+        Self {
+            freq_hz,
+            initial_phase,
+        }
+    }
 }
 
 impl Signal for SawOsc {
@@ -103,14 +123,19 @@ impl Signal for SawOsc {
     }
 }
 
-struct SawInstance { phase: f32, phase_inc: f32 }
+struct SawInstance {
+    phase: f32,
+    phase_inc: f32,
+}
 
 impl SignalInstance for SawInstance {
     fn fill(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
             *s = self.phase * 2.0 - 1.0;
             self.phase += self.phase_inc;
-            if self.phase >= 1.0 { self.phase -= 1.0; }
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
         }
     }
 }
@@ -125,7 +150,9 @@ pub struct WhiteNoise {
 }
 
 impl WhiteNoise {
-    pub fn new(seed: u64) -> Self { Self { seed } }
+    pub fn new(seed: u64) -> Self {
+        Self { seed }
+    }
 }
 
 impl Signal for WhiteNoise {
@@ -134,11 +161,15 @@ impl Signal for WhiteNoise {
     }
 }
 
-struct WhiteNoiseInstance { seed: u64 }
+struct WhiteNoiseInstance {
+    seed: u64,
+}
 
 impl SignalInstance for WhiteNoiseInstance {
     fn fill(&mut self, out: &mut [f32]) {
-        for s in out.iter_mut() { *s = lcg_next(&mut self.seed); }
+        for s in out.iter_mut() {
+            *s = lcg_next(&mut self.seed);
+        }
     }
 }
 
@@ -149,14 +180,18 @@ pub struct PinkNoise {
 }
 
 impl PinkNoise {
-    pub fn new(seed: u64) -> Self { Self { seed } }
+    pub fn new(seed: u64) -> Self {
+        Self { seed }
+    }
 }
 
 impl Signal for PinkNoise {
     fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
         let mut seed = self.seed;
         let mut gens = [0.0f32; 16];
-        for g in gens.iter_mut() { *g = lcg_next(&mut seed); }
+        for g in gens.iter_mut() {
+            *g = lcg_next(&mut seed);
+        }
         Box::new(PinkNoiseInstance {
             gens,
             running_sum: gens.iter().sum(),
@@ -240,7 +275,11 @@ pub struct PluckOsc {
 
 impl PluckOsc {
     pub fn new(freq_hz: f32, decay_time: f32) -> Self {
-        Self { freq_hz, decay_time, seed: 0xdeadbeef_cafebabe }
+        Self {
+            freq_hz,
+            decay_time,
+            seed: 0xdeadbeef_cafebabe,
+        }
     }
 }
 
@@ -255,7 +294,11 @@ impl Signal for PluckOsc {
         } else {
             0.0
         };
-        Box::new(PluckInstance { buffer, pos: 0, decay })
+        Box::new(PluckInstance {
+            buffer,
+            pos: 0,
+            decay,
+        })
     }
 }
 
@@ -297,7 +340,11 @@ impl Signal for ArEnv {
     }
 }
 
-struct ArEnvInstance { attack: usize, release: usize, pos: usize }
+struct ArEnvInstance {
+    attack: usize,
+    release: usize,
+    pos: usize,
+}
 
 impl SignalInstance for ArEnvInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -386,16 +433,24 @@ pub struct BrownNoise {
 }
 
 impl BrownNoise {
-    pub fn new(seed: u64) -> Self { Self { seed } }
+    pub fn new(seed: u64) -> Self {
+        Self { seed }
+    }
 }
 
 impl Signal for BrownNoise {
     fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
-        Box::new(BrownInstance { seed: self.seed, val: 0.0 })
+        Box::new(BrownInstance {
+            seed: self.seed,
+            val: 0.0,
+        })
     }
 }
 
-struct BrownInstance { seed: u64, val: f32 }
+struct BrownInstance {
+    seed: u64,
+    val: f32,
+}
 
 impl SignalInstance for BrownInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -415,24 +470,46 @@ pub struct TriOsc {
 }
 
 impl TriOsc {
-    pub fn new(freq_hz: f32) -> Self { Self { freq_hz, initial_phase: 0.0 } }
-    pub fn with_phase(freq_hz: f32, initial_phase: f32) -> Self { Self { freq_hz, initial_phase } }
+    pub fn new(freq_hz: f32) -> Self {
+        Self {
+            freq_hz,
+            initial_phase: 0.0,
+        }
+    }
+    pub fn with_phase(freq_hz: f32, initial_phase: f32) -> Self {
+        Self {
+            freq_hz,
+            initial_phase,
+        }
+    }
 }
 
 impl Signal for TriOsc {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
-        Box::new(TriInstance { phase: self.initial_phase, phase_inc: self.freq_hz / sr as f32 })
+        Box::new(TriInstance {
+            phase: self.initial_phase,
+            phase_inc: self.freq_hz / sr as f32,
+        })
     }
 }
 
-struct TriInstance { phase: f32, phase_inc: f32 }
+struct TriInstance {
+    phase: f32,
+    phase_inc: f32,
+}
 
 impl SignalInstance for TriInstance {
     fn fill(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
-            *s = if self.phase < 0.5 { 4.0 * self.phase - 1.0 } else { 3.0 - 4.0 * self.phase };
+            *s = if self.phase < 0.5 {
+                4.0 * self.phase - 1.0
+            } else {
+                3.0 - 4.0 * self.phase
+            };
             self.phase += self.phase_inc;
-            if self.phase >= 1.0 { self.phase -= 1.0; }
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
         }
     }
 }
@@ -446,9 +523,19 @@ pub struct PulseOsc {
 }
 
 impl PulseOsc {
-    pub fn new(freq_hz: f32, duty: f32) -> Self { Self { freq_hz, duty, initial_phase: 0.0 } }
+    pub fn new(freq_hz: f32, duty: f32) -> Self {
+        Self {
+            freq_hz,
+            duty,
+            initial_phase: 0.0,
+        }
+    }
     pub fn with_phase(freq_hz: f32, duty: f32, initial_phase: f32) -> Self {
-        Self { freq_hz, duty, initial_phase }
+        Self {
+            freq_hz,
+            duty,
+            initial_phase,
+        }
     }
 }
 
@@ -462,14 +549,20 @@ impl Signal for PulseOsc {
     }
 }
 
-struct PulseInstance { phase: f32, phase_inc: f32, duty: f32 }
+struct PulseInstance {
+    phase: f32,
+    phase_inc: f32,
+    duty: f32,
+}
 
 impl SignalInstance for PulseInstance {
     fn fill(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
             *s = if self.phase < self.duty { 1.0 } else { -1.0 };
             self.phase += self.phase_inc;
-            if self.phase >= 1.0 { self.phase -= 1.0; }
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
         }
     }
 }
@@ -482,7 +575,12 @@ pub struct ImpulseSignal {
 }
 
 impl ImpulseSignal {
-    pub fn new(freq_hz: f32) -> Self { Self { freq_hz, initial_phase: 0.0 } }
+    pub fn new(freq_hz: f32) -> Self {
+        Self {
+            freq_hz,
+            initial_phase: 0.0,
+        }
+    }
 }
 
 impl Signal for ImpulseSignal {
@@ -494,7 +592,10 @@ impl Signal for ImpulseSignal {
     }
 }
 
-struct ImpulseInstance { phase: f32, phase_inc: f32 }
+struct ImpulseInstance {
+    phase: f32,
+    phase_inc: f32,
+}
 
 impl SignalInstance for ImpulseInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -502,7 +603,9 @@ impl SignalInstance for ImpulseInstance {
             let next = self.phase + self.phase_inc;
             *s = if next >= 1.0 { 1.0 } else { 0.0 };
             self.phase = next;
-            if self.phase >= 1.0 { self.phase -= 1.0; }
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
         }
     }
 }
@@ -527,7 +630,13 @@ fn rbj_lpf(fc: f64, sr: f64, q: f64) -> (f64, f64, f64, f64, f64) {
     let b0 = (1.0 - cos_w0) / 2.0;
     let b1 = 1.0 - cos_w0;
     let b2 = b0;
-    (b0/a0, b1/a0, b2/a0, -2.0*cos_w0/a0, (1.0-alpha)/a0)
+    (
+        b0 / a0,
+        b1 / a0,
+        b2 / a0,
+        -2.0 * cos_w0 / a0,
+        (1.0 - alpha) / a0,
+    )
 }
 
 /// RBJ cookbook HP filter coefficients: (b0, b1, b2, a1, a2) normalised by a0.
@@ -536,7 +645,13 @@ fn rbj_hpf(fc: f64, sr: f64, q: f64) -> (f64, f64, f64, f64, f64) {
     let b0 = (1.0 + cos_w0) / 2.0;
     let b1 = -(1.0 + cos_w0);
     let b2 = b0;
-    (b0/a0, b1/a0, b2/a0, -2.0*cos_w0/a0, (1.0-alpha)/a0)
+    (
+        b0 / a0,
+        b1 / a0,
+        b2 / a0,
+        -2.0 * cos_w0 / a0,
+        (1.0 - alpha) / a0,
+    )
 }
 
 /// Shared transposed-direct-form-II biquad instance.
@@ -571,11 +686,19 @@ pub struct Lpf1Signal {
 impl Signal for Lpf1Signal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let a = (1.0 - (-std::f64::consts::TAU * self.cutoff_hz as f64 / sr).exp()) as f32;
-        Box::new(Lpf1Instance { input: self.input.instantiate(sr), a, y: 0.0 })
+        Box::new(Lpf1Instance {
+            input: self.input.instantiate(sr),
+            a,
+            y: 0.0,
+        })
     }
 }
 
-struct Lpf1Instance { input: Box<dyn SignalInstance>, a: f32, y: f32 }
+struct Lpf1Instance {
+    input: Box<dyn SignalInstance>,
+    a: f32,
+    y: f32,
+}
 
 impl SignalInstance for Lpf1Instance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -601,7 +724,8 @@ impl Signal for Lpf2Signal {
             input: self.input.instantiate(sr),
             b: [b0 as f32, b1 as f32, b2 as f32],
             a: [a1 as f32, a2 as f32],
-            s1: 0.0, s2: 0.0,
+            s1: 0.0,
+            s2: 0.0,
         })
     }
 }
@@ -616,11 +740,19 @@ pub struct Hpf1Signal {
 impl Signal for Hpf1Signal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let a = (1.0 - (-std::f64::consts::TAU * self.cutoff_hz as f64 / sr).exp()) as f32;
-        Box::new(Hpf1Instance { input: self.input.instantiate(sr), a, y_lp: 0.0 })
+        Box::new(Hpf1Instance {
+            input: self.input.instantiate(sr),
+            a,
+            y_lp: 0.0,
+        })
     }
 }
 
-struct Hpf1Instance { input: Box<dyn SignalInstance>, a: f32, y_lp: f32 }
+struct Hpf1Instance {
+    input: Box<dyn SignalInstance>,
+    a: f32,
+    y_lp: f32,
+}
 
 impl SignalInstance for Hpf1Instance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -646,7 +778,8 @@ impl Signal for Hpf2Signal {
             input: self.input.instantiate(sr),
             b: [b0 as f32, b1 as f32, b2 as f32],
             a: [a1 as f32, a2 as f32],
-            s1: 0.0, s2: 0.0,
+            s1: 0.0,
+            s2: 0.0,
         })
     }
 }
@@ -667,7 +800,8 @@ impl Signal for RlpfSignal {
             input: self.input.instantiate(sr),
             b: [b0 as f32, b1 as f32, b2 as f32],
             a: [a1 as f32, a2 as f32],
-            s1: 0.0, s2: 0.0,
+            s1: 0.0,
+            s2: 0.0,
         })
     }
 }
@@ -688,7 +822,8 @@ impl Signal for RhpfSignal {
             input: self.input.instantiate(sr),
             b: [b0 as f32, b1 as f32, b2 as f32],
             a: [a1 as f32, a2 as f32],
-            s1: 0.0, s2: 0.0,
+            s1: 0.0,
+            s2: 0.0,
         })
     }
 }
@@ -703,11 +838,19 @@ pub struct LagSignal {
 impl Signal for LagSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let coeff = lag_coeff(self.lag_time, sr);
-        Box::new(LagInstance { input: self.input.instantiate(sr), coeff, y: 0.0 })
+        Box::new(LagInstance {
+            input: self.input.instantiate(sr),
+            coeff,
+            y: 0.0,
+        })
     }
 }
 
-struct LagInstance { input: Box<dyn SignalInstance>, coeff: f32, y: f32 }
+struct LagInstance {
+    input: Box<dyn SignalInstance>,
+    coeff: f32,
+    y: f32,
+}
 
 impl SignalInstance for LagInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -729,11 +872,21 @@ pub struct Lag2Signal {
 impl Signal for Lag2Signal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let coeff = lag_coeff(self.lag_time, sr);
-        Box::new(Lag2Instance { input: self.input.instantiate(sr), coeff, y1: 0.0, y2: 0.0 })
+        Box::new(Lag2Instance {
+            input: self.input.instantiate(sr),
+            coeff,
+            y1: 0.0,
+            y2: 0.0,
+        })
     }
 }
 
-struct Lag2Instance { input: Box<dyn SignalInstance>, coeff: f32, y1: f32, y2: f32 }
+struct Lag2Instance {
+    input: Box<dyn SignalInstance>,
+    coeff: f32,
+    y1: f32,
+    y2: f32,
+}
 
 impl SignalInstance for Lag2Instance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -764,7 +917,12 @@ impl Signal for LeakDcSignal {
     }
 }
 
-struct LeakDcInstance { input: Box<dyn SignalInstance>, r: f32, x_prev: f32, y_prev: f32 }
+struct LeakDcInstance {
+    input: Box<dyn SignalInstance>,
+    r: f32,
+    x_prev: f32,
+    y_prev: f32,
+}
 
 impl SignalInstance for LeakDcInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -790,11 +948,21 @@ pub struct LineSignal {
 impl Signal for LineSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let total = (self.dur_secs as f64 * sr).round() as usize;
-        Box::new(LineInstance { start: self.start, end: self.end, total, pos: 0 })
+        Box::new(LineInstance {
+            start: self.start,
+            end: self.end,
+            total,
+            pos: 0,
+        })
     }
 }
 
-struct LineInstance { start: f32, end: f32, total: usize, pos: usize }
+struct LineInstance {
+    start: f32,
+    end: f32,
+    total: usize,
+    pos: usize,
+}
 
 impl SignalInstance for LineInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -827,16 +995,32 @@ impl Signal for XlineSignal {
         } else {
             (self.end / self.start).powf(1.0 / total as f32)
         };
-        Box::new(XlineInstance { end: self.end, total, pos: 0, ratio, cur })
+        Box::new(XlineInstance {
+            end: self.end,
+            total,
+            pos: 0,
+            ratio,
+            cur,
+        })
     }
 }
 
-struct XlineInstance { end: f32, total: usize, pos: usize, ratio: f32, cur: f32 }
+struct XlineInstance {
+    end: f32,
+    total: usize,
+    pos: usize,
+    ratio: f32,
+    cur: f32,
+}
 
 impl SignalInstance for XlineInstance {
     fn fill(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
-            *s = if self.pos >= self.total { self.end } else { self.cur };
+            *s = if self.pos >= self.total {
+                self.end
+            } else {
+                self.cur
+            };
             self.cur *= self.ratio;
             self.pos += 1;
         }
@@ -861,7 +1045,10 @@ impl Signal for DecaySignal {
     }
 }
 
-struct DecayInstance { val: f32, decay: f32 }
+struct DecayInstance {
+    val: f32,
+    decay: f32,
+}
 
 impl SignalInstance for DecayInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -874,42 +1061,73 @@ impl SignalInstance for DecayInstance {
 
 // ---- LfNoise0Signal (stepped random — new value at freq Hz) -----------------
 
-pub struct LfNoise0Signal { pub freq_hz: f32, pub seed: u64 }
+pub struct LfNoise0Signal {
+    pub freq_hz: f32,
+    pub seed: u64,
+}
 
 impl Signal for LfNoise0Signal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let mut seed = self.seed;
         let cur_val = lcg_next(&mut seed);
-        Box::new(LfNoise0Instance { phase: 0.0, phase_inc: self.freq_hz / sr as f32, cur_val, seed })
+        Box::new(LfNoise0Instance {
+            phase: 0.0,
+            phase_inc: self.freq_hz / sr as f32,
+            cur_val,
+            seed,
+        })
     }
 }
 
-struct LfNoise0Instance { phase: f32, phase_inc: f32, cur_val: f32, seed: u64 }
+struct LfNoise0Instance {
+    phase: f32,
+    phase_inc: f32,
+    cur_val: f32,
+    seed: u64,
+}
 
 impl SignalInstance for LfNoise0Instance {
     fn fill(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
             *s = self.cur_val;
             self.phase += self.phase_inc;
-            if self.phase >= 1.0 { self.phase -= 1.0; self.cur_val = lcg_next(&mut self.seed); }
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+                self.cur_val = lcg_next(&mut self.seed);
+            }
         }
     }
 }
 
 // ---- LfNoise1Signal (linearly interpolated random) --------------------------
 
-pub struct LfNoise1Signal { pub freq_hz: f32, pub seed: u64 }
+pub struct LfNoise1Signal {
+    pub freq_hz: f32,
+    pub seed: u64,
+}
 
 impl Signal for LfNoise1Signal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let mut seed = self.seed;
         let cur_val = lcg_next(&mut seed);
         let next_val = lcg_next(&mut seed);
-        Box::new(LfNoise1Instance { phase: 0.0, phase_inc: self.freq_hz / sr as f32, cur_val, next_val, seed })
+        Box::new(LfNoise1Instance {
+            phase: 0.0,
+            phase_inc: self.freq_hz / sr as f32,
+            cur_val,
+            next_val,
+            seed,
+        })
     }
 }
 
-struct LfNoise1Instance { phase: f32, phase_inc: f32, cur_val: f32, next_val: f32, seed: u64 }
+struct LfNoise1Instance {
+    phase: f32,
+    phase_inc: f32,
+    cur_val: f32,
+    next_val: f32,
+    seed: u64,
+}
 
 impl SignalInstance for LfNoise1Instance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -927,7 +1145,11 @@ impl SignalInstance for LfNoise1Instance {
 
 // ---- DustSignal (random impulse train) --------------------------------------
 
-pub struct DustSignal { pub density_hz: f32, pub seed: u64, pub bipolar: bool }
+pub struct DustSignal {
+    pub density_hz: f32,
+    pub seed: u64,
+    pub bipolar: bool,
+}
 
 impl Signal for DustSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
@@ -939,14 +1161,22 @@ impl Signal for DustSignal {
     }
 }
 
-struct DustInstance { threshold: f32, seed: u64, bipolar: bool }
+struct DustInstance {
+    threshold: f32,
+    seed: u64,
+    bipolar: bool,
+}
 
 impl SignalInstance for DustInstance {
     fn fill(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
             let u = lcg_next(&mut self.seed) * 0.5 + 0.5; // map [-1,1) → [0,1)
             *s = if u < self.threshold {
-                if self.bipolar { lcg_next(&mut self.seed).signum() } else { 1.0 }
+                if self.bipolar {
+                    lcg_next(&mut self.seed).signum()
+                } else {
+                    1.0
+                }
             } else {
                 0.0
             };
@@ -956,7 +1186,10 @@ impl SignalInstance for DustInstance {
 
 // ---- SahSignal (sample-and-hold) -------------------------------------------
 
-pub struct SahSignal { pub input: Arc<dyn Signal>, pub trigger: Arc<dyn Signal> }
+pub struct SahSignal {
+    pub input: Arc<dyn Signal>,
+    pub trigger: Arc<dyn Signal>,
+}
 
 impl Signal for SahSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
@@ -969,7 +1202,12 @@ impl Signal for SahSignal {
     }
 }
 
-struct SahInstance { input: Box<dyn SignalInstance>, trigger: Box<dyn SignalInstance>, held: f32, trig_buf: Vec<f32> }
+struct SahInstance {
+    input: Box<dyn SignalInstance>,
+    trigger: Box<dyn SignalInstance>,
+    held: f32,
+    trig_buf: Vec<f32>,
+}
 
 impl SignalInstance for SahInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -978,7 +1216,9 @@ impl SignalInstance for SahInstance {
         self.input.fill(out);
         self.trigger.fill(&mut self.trig_buf[..n]);
         for (i, s) in out.iter_mut().enumerate() {
-            if self.trig_buf[i] > 0.0 { self.held = *s; }
+            if self.trig_buf[i] > 0.0 {
+                self.held = *s;
+            }
             *s = self.held;
         }
     }
@@ -986,16 +1226,27 @@ impl SignalInstance for SahInstance {
 
 // ---- DelayNSignal (fixed non-interpolating delay) ---------------------------
 
-pub struct DelayNSignal { pub input: Arc<dyn Signal>, pub delay_secs: f32 }
+pub struct DelayNSignal {
+    pub input: Arc<dyn Signal>,
+    pub delay_secs: f32,
+}
 
 impl Signal for DelayNSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let delay = ((self.delay_secs as f64 * sr).round() as usize).max(1);
-        Box::new(DelayNInstance { input: self.input.instantiate(sr), buffer: vec![0.0f32; delay], pos: 0 })
+        Box::new(DelayNInstance {
+            input: self.input.instantiate(sr),
+            buffer: vec![0.0f32; delay],
+            pos: 0,
+        })
     }
 }
 
-struct DelayNInstance { input: Box<dyn SignalInstance>, buffer: Vec<f32>, pos: usize }
+struct DelayNInstance {
+    input: Box<dyn SignalInstance>,
+    buffer: Vec<f32>,
+    pos: usize,
+}
 
 impl SignalInstance for DelayNInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -1012,7 +1263,9 @@ impl SignalInstance for DelayNInstance {
 
 // ---- HanEnvSignal (raised-cosine / Hanning window envelope) -----------------
 
-pub struct HanEnvSignal { pub dur_secs: f32 }
+pub struct HanEnvSignal {
+    pub dur_secs: f32,
+}
 
 impl Signal for HanEnvSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
@@ -1021,7 +1274,10 @@ impl Signal for HanEnvSignal {
     }
 }
 
-struct HanEnvInstance { total: usize, pos: usize }
+struct HanEnvInstance {
+    total: usize,
+    pos: usize,
+}
 
 impl SignalInstance for HanEnvInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -1039,27 +1295,45 @@ impl SignalInstance for HanEnvInstance {
 
 // ---- Decay2Signal (linear attack + exponential decay) -----------------------
 
-pub struct Decay2Signal { pub attack_secs: f32, pub decay_secs: f32 }
+pub struct Decay2Signal {
+    pub attack_secs: f32,
+    pub decay_secs: f32,
+}
 
 impl Signal for Decay2Signal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let attack = (self.attack_secs as f64 * sr).round() as usize;
-        let decay_coeff = if self.decay_secs <= 0.0 { 0.0f32 }
-            else { (-6.9078 / (self.decay_secs as f64 * sr)).exp() as f32 };
-        Box::new(Decay2Instance { attack, pos: 0, decay_coeff, cur: 0.0 })
+        let decay_coeff = if self.decay_secs <= 0.0 {
+            0.0f32
+        } else {
+            (-6.9078 / (self.decay_secs as f64 * sr)).exp() as f32
+        };
+        Box::new(Decay2Instance {
+            attack,
+            pos: 0,
+            decay_coeff,
+            cur: 0.0,
+        })
     }
 }
 
-struct Decay2Instance { attack: usize, pos: usize, decay_coeff: f32, cur: f32 }
+struct Decay2Instance {
+    attack: usize,
+    pos: usize,
+    decay_coeff: f32,
+    cur: f32,
+}
 
 impl SignalInstance for Decay2Instance {
     fn fill(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
             *s = if self.pos < self.attack {
                 let v = self.pos as f32 / self.attack.max(1) as f32;
-                self.cur = v; v
+                self.cur = v;
+                v
             } else {
-                self.cur *= self.decay_coeff; self.cur
+                self.cur *= self.decay_coeff;
+                self.cur
             };
             self.pos += 1;
         }
@@ -1101,7 +1375,11 @@ impl SignalInstance for PanChannelInstance {
         for (i, s) in out.iter_mut().enumerate() {
             // pan in [-1,1] → angle in [0, π/2]
             let angle = (self.pan_buf[i].clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
-            let gain = if self.is_right { angle.sin() } else { angle.cos() };
+            let gain = if self.is_right {
+                angle.sin()
+            } else {
+                angle.cos()
+            };
             *s *= gain;
         }
     }
@@ -1128,7 +1406,13 @@ impl Signal for Mix2Signal {
     }
 }
 
-struct Mix2Instance { a: Box<dyn SignalInstance>, b: Box<dyn SignalInstance>, gain_a: f32, gain_b: f32, buf_b: Vec<f32> }
+struct Mix2Instance {
+    a: Box<dyn SignalInstance>,
+    b: Box<dyn SignalInstance>,
+    gain_a: f32,
+    gain_b: f32,
+    buf_b: Vec<f32>,
+}
 
 impl SignalInstance for Mix2Instance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -1144,7 +1428,10 @@ impl SignalInstance for Mix2Instance {
 
 // ---- UpsampleSignal (nearest-neighbour: each sample repeated N times) -------
 
-pub struct UpsampleSignal { pub input: Arc<dyn Signal>, pub factor: usize }
+pub struct UpsampleSignal {
+    pub input: Arc<dyn Signal>,
+    pub factor: usize,
+}
 
 impl Signal for UpsampleSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
@@ -1157,7 +1444,12 @@ impl Signal for UpsampleSignal {
     }
 }
 
-struct UpsampleInstance { input: Box<dyn SignalInstance>, factor: usize, count: usize, cur_val: f32 }
+struct UpsampleInstance {
+    input: Box<dyn SignalInstance>,
+    factor: usize,
+    count: usize,
+    cur_val: f32,
+}
 
 impl SignalInstance for UpsampleInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -1175,16 +1467,25 @@ impl SignalInstance for UpsampleInstance {
 
 // ---- DownsampleSignal (nearest-neighbour: take first of every N input samples)
 
-pub struct DownsampleSignal { pub input: Arc<dyn Signal>, pub factor: usize }
+pub struct DownsampleSignal {
+    pub input: Arc<dyn Signal>,
+    pub factor: usize,
+}
 
 impl Signal for DownsampleSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let factor = self.factor.max(1);
-        Box::new(DownsampleInstance { input: self.input.instantiate(sr), temp: vec![0.0f32; factor] })
+        Box::new(DownsampleInstance {
+            input: self.input.instantiate(sr),
+            temp: vec![0.0f32; factor],
+        })
     }
 }
 
-struct DownsampleInstance { input: Box<dyn SignalInstance>, temp: Vec<f32> }
+struct DownsampleInstance {
+    input: Box<dyn SignalInstance>,
+    temp: Vec<f32>,
+}
 
 impl SignalInstance for DownsampleInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -1207,12 +1508,19 @@ pub struct DispersalSignal {
 impl Signal for DispersalSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let stages = self.stages.max(1);
-        let coeffs: Vec<f32> = (0..stages).map(|k| {
-            let t = if stages == 1 { 0.5 } else { k as f64 / (stages - 1) as f64 };
-            let fc = self.lo_hz as f64 * (self.hi_hz as f64 / (self.lo_hz as f64).max(1e-6)).powf(t);
-            let w = (std::f64::consts::PI * fc / sr).tan();
-            ((w - 1.0) / (w + 1.0)) as f32  // 1st-order allpass coeff at fc
-        }).collect();
+        let coeffs: Vec<f32> = (0..stages)
+            .map(|k| {
+                let t = if stages == 1 {
+                    0.5
+                } else {
+                    k as f64 / (stages - 1) as f64
+                };
+                let fc =
+                    self.lo_hz as f64 * (self.hi_hz as f64 / (self.lo_hz as f64).max(1e-6)).powf(t);
+                let w = (std::f64::consts::PI * fc / sr).tan();
+                ((w - 1.0) / (w + 1.0)) as f32 // 1st-order allpass coeff at fc
+            })
+            .collect();
         let n = coeffs.len();
         Box::new(DispersalInstance {
             input: self.input.instantiate(sr),
@@ -1260,13 +1568,13 @@ where
     F: Fn(f32, f32, f32) -> (f32, f32, f32),
 {
     let (k1x, k1y, k1z) = f(x, y, z);
-    let (k2x, k2y, k2z) = f(x + 0.5*dt*k1x, y + 0.5*dt*k1y, z + 0.5*dt*k1z);
-    let (k3x, k3y, k3z) = f(x + 0.5*dt*k2x, y + 0.5*dt*k2y, z + 0.5*dt*k2z);
-    let (k4x, k4y, k4z) = f(x + dt*k3x,     y + dt*k3y,     z + dt*k3z);
+    let (k2x, k2y, k2z) = f(x + 0.5 * dt * k1x, y + 0.5 * dt * k1y, z + 0.5 * dt * k1z);
+    let (k3x, k3y, k3z) = f(x + 0.5 * dt * k2x, y + 0.5 * dt * k2y, z + 0.5 * dt * k2z);
+    let (k4x, k4y, k4z) = f(x + dt * k3x, y + dt * k3y, z + dt * k3z);
     (
-        x + dt/6.0 * (k1x + 2.0*k2x + 2.0*k3x + k4x),
-        y + dt/6.0 * (k1y + 2.0*k2y + 2.0*k3y + k4y),
-        z + dt/6.0 * (k1z + 2.0*k2z + 2.0*k3z + k4z),
+        x + dt / 6.0 * (k1x + 2.0 * k2x + 2.0 * k3x + k4x),
+        y + dt / 6.0 * (k1y + 2.0 * k2y + 2.0 * k3y + k4y),
+        z + dt / 6.0 * (k1z + 2.0 * k2z + 2.0 * k3z + k4z),
     )
 }
 
@@ -1278,42 +1586,65 @@ where
     F: Fn(f32, f32) -> (f32, f32),
 {
     let (k1x, k1v) = f(x, v);
-    let (k2x, k2v) = f(x + 0.5*dt*k1x, v + 0.5*dt*k1v);
-    let (k3x, k3v) = f(x + 0.5*dt*k2x, v + 0.5*dt*k2v);
-    let (k4x, k4v) = f(x + dt*k3x,     v + dt*k3v);
+    let (k2x, k2v) = f(x + 0.5 * dt * k1x, v + 0.5 * dt * k1v);
+    let (k3x, k3v) = f(x + 0.5 * dt * k2x, v + 0.5 * dt * k2v);
+    let (k4x, k4v) = f(x + dt * k3x, v + dt * k3v);
     (
-        x + dt/6.0 * (k1x + 2.0*k2x + 2.0*k3x + k4x),
-        v + dt/6.0 * (k1v + 2.0*k2v + 2.0*k3v + k4v),
+        x + dt / 6.0 * (k1x + 2.0 * k2x + 2.0 * k3x + k4x),
+        v + dt / 6.0 * (k1v + 2.0 * k2v + 2.0 * k3v + k4v),
     )
 }
 
 // Lorenz: dx/dt = sigma*(y-x), dy/dt = x*(rho-z)-y, dz/dt = x*y-beta*z
 // Classic: sigma=10, rho=28, beta=2.667, dt=0.005. x/y range ≈ ±20, z ∈ [0,50].
 pub struct LorenzSignal {
-    pub sigma: f32, pub rho: f32, pub beta: f32,
+    pub sigma: f32,
+    pub rho: f32,
+    pub beta: f32,
     pub dt: f32,
-    pub x0: f32, pub y0: f32, pub z0: f32,
-    pub output: u8,   // 0=x, 1=y, 2=z
+    pub x0: f32,
+    pub y0: f32,
+    pub z0: f32,
+    pub output: u8, // 0=x, 1=y, 2=z
 }
 
 impl Signal for LorenzSignal {
     fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
         Box::new(LorenzInstance {
-            sigma: self.sigma, rho: self.rho, beta: self.beta,
-            dt: self.dt, x: self.x0, y: self.y0, z: self.z0, output: self.output,
+            sigma: self.sigma,
+            rho: self.rho,
+            beta: self.beta,
+            dt: self.dt,
+            x: self.x0,
+            y: self.y0,
+            z: self.z0,
+            output: self.output,
         })
     }
 }
 
-struct LorenzInstance { sigma: f32, rho: f32, beta: f32, dt: f32, x: f32, y: f32, z: f32, output: u8 }
+struct LorenzInstance {
+    sigma: f32,
+    rho: f32,
+    beta: f32,
+    dt: f32,
+    x: f32,
+    y: f32,
+    z: f32,
+    output: u8,
+}
 
 impl SignalInstance for LorenzInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let (sigma, rho, beta, dt) = (self.sigma, self.rho, self.beta, self.dt);
         for s in out.iter_mut() {
-            *s = match self.output { 0 => self.x, 1 => self.y, _ => self.z };
+            *s = match self.output {
+                0 => self.x,
+                1 => self.y,
+                _ => self.z,
+            };
             (self.x, self.y, self.z) = rk4_3d(self.x, self.y, self.z, dt, |x, y, z| {
-                (sigma*(y-x), x*(rho-z)-y, x*y-beta*z)
+                (sigma * (y - x), x * (rho - z) - y, x * y - beta * z)
             });
         }
     }
@@ -1322,30 +1653,53 @@ impl SignalInstance for LorenzInstance {
 // Rössler: dx/dt = -(y+z), dy/dt = x+a*y, dz/dt = b+z*(x-c)
 // Classic: a=0.2, b=0.2, c=5.7, dt=0.01. x range ≈ ±10.
 pub struct RosslerSignal {
-    pub a: f32, pub b: f32, pub c: f32,
+    pub a: f32,
+    pub b: f32,
+    pub c: f32,
     pub dt: f32,
-    pub x0: f32, pub y0: f32, pub z0: f32,
+    pub x0: f32,
+    pub y0: f32,
+    pub z0: f32,
     pub output: u8,
 }
 
 impl Signal for RosslerSignal {
     fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
         Box::new(RosslerInstance {
-            a: self.a, b: self.b, c: self.c,
-            dt: self.dt, x: self.x0, y: self.y0, z: self.z0, output: self.output,
+            a: self.a,
+            b: self.b,
+            c: self.c,
+            dt: self.dt,
+            x: self.x0,
+            y: self.y0,
+            z: self.z0,
+            output: self.output,
         })
     }
 }
 
-struct RosslerInstance { a: f32, b: f32, c: f32, dt: f32, x: f32, y: f32, z: f32, output: u8 }
+struct RosslerInstance {
+    a: f32,
+    b: f32,
+    c: f32,
+    dt: f32,
+    x: f32,
+    y: f32,
+    z: f32,
+    output: u8,
+}
 
 impl SignalInstance for RosslerInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let (a, b, c, dt) = (self.a, self.b, self.c, self.dt);
         for s in out.iter_mut() {
-            *s = match self.output { 0 => self.x, 1 => self.y, _ => self.z };
+            *s = match self.output {
+                0 => self.x,
+                1 => self.y,
+                _ => self.z,
+            };
             (self.x, self.y, self.z) = rk4_3d(self.x, self.y, self.z, dt, |x, y, z| {
-                (-(y+z), x+a*y, b+z*(x-c))
+                (-(y + z), x + a * y, b + z * (x - c))
             });
         }
     }
@@ -1355,46 +1709,74 @@ impl SignalInstance for RosslerInstance {
 // [dx/dt = v,  dv/dt = -delta*v - alpha*x - beta*x^3 + gamma*cos(omega*t)]
 // Classic chaotic: alpha=-1, beta=1, delta=0.3, gamma=0.5, omega=1.2, dt=0.1. x range ≈ ±1.
 pub struct DuffingSignal {
-    pub alpha: f32, pub beta: f32, pub delta: f32,
-    pub gamma: f32, pub omega: f32,
+    pub alpha: f32,
+    pub beta: f32,
+    pub delta: f32,
+    pub gamma: f32,
+    pub omega: f32,
     pub dt: f32,
-    pub x0: f32, pub v0: f32,
+    pub x0: f32,
+    pub v0: f32,
 }
 
 impl Signal for DuffingSignal {
     fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
         Box::new(DuffingInstance {
-            alpha: self.alpha, beta: self.beta, delta: self.delta,
-            gamma: self.gamma, omega: self.omega,
-            dt: self.dt, x: self.x0, v: self.v0, t: 0.0,
+            alpha: self.alpha,
+            beta: self.beta,
+            delta: self.delta,
+            gamma: self.gamma,
+            omega: self.omega,
+            dt: self.dt,
+            x: self.x0,
+            v: self.v0,
+            t: 0.0,
         })
     }
 }
 
 struct DuffingInstance {
-    alpha: f32, beta: f32, delta: f32,
-    gamma: f32, omega: f32,
-    dt: f32, x: f32, v: f32, t: f32,
+    alpha: f32,
+    beta: f32,
+    delta: f32,
+    gamma: f32,
+    omega: f32,
+    dt: f32,
+    x: f32,
+    v: f32,
+    t: f32,
 }
 
 impl SignalInstance for DuffingInstance {
     fn fill(&mut self, out: &mut [f32]) {
-        let (alpha, beta, delta, gamma, omega, dt) =
-            (self.alpha, self.beta, self.delta, self.gamma, self.omega, self.dt);
+        let (alpha, beta, delta, gamma, omega, dt) = (
+            self.alpha, self.beta, self.delta, self.gamma, self.omega, self.dt,
+        );
         // Duffing is non-autonomous: forcing term depends on t, so each RK4
         // sub-step must use the correct sub-step time.
         for s in out.iter_mut() {
             *s = self.x;
             let t = self.t;
             let f = |x: f32, v: f32, t_sub: f32| -> (f32, f32) {
-                (v, -delta*v - alpha*x - beta*x*x*x + gamma*(omega*t_sub).cos())
+                (
+                    v,
+                    -delta * v - alpha * x - beta * x * x * x + gamma * (omega * t_sub).cos(),
+                )
             };
             let (k1x, k1v) = f(self.x, self.v, t);
-            let (k2x, k2v) = f(self.x + 0.5*dt*k1x, self.v + 0.5*dt*k1v, t + 0.5*dt);
-            let (k3x, k3v) = f(self.x + 0.5*dt*k2x, self.v + 0.5*dt*k2v, t + 0.5*dt);
-            let (k4x, k4v) = f(self.x + dt*k3x,     self.v + dt*k3v,     t + dt);
-            self.x += dt/6.0 * (k1x + 2.0*k2x + 2.0*k3x + k4x);
-            self.v += dt/6.0 * (k1v + 2.0*k2v + 2.0*k3v + k4v);
+            let (k2x, k2v) = f(
+                self.x + 0.5 * dt * k1x,
+                self.v + 0.5 * dt * k1v,
+                t + 0.5 * dt,
+            );
+            let (k3x, k3v) = f(
+                self.x + 0.5 * dt * k2x,
+                self.v + 0.5 * dt * k2v,
+                t + 0.5 * dt,
+            );
+            let (k4x, k4v) = f(self.x + dt * k3x, self.v + dt * k3v, t + dt);
+            self.x += dt / 6.0 * (k1x + 2.0 * k2x + 2.0 * k3x + k4x);
+            self.v += dt / 6.0 * (k1v + 2.0 * k2v + 2.0 * k3v + k4v);
             self.t += dt;
         }
     }
@@ -1406,25 +1788,34 @@ impl SignalInstance for DuffingInstance {
 pub struct VanDerPolSignal {
     pub mu: f32,
     pub dt: f32,
-    pub x0: f32, pub v0: f32,
+    pub x0: f32,
+    pub v0: f32,
 }
 
 impl Signal for VanDerPolSignal {
     fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
-        Box::new(VanDerPolInstance { mu: self.mu, dt: self.dt, x: self.x0, v: self.v0 })
+        Box::new(VanDerPolInstance {
+            mu: self.mu,
+            dt: self.dt,
+            x: self.x0,
+            v: self.v0,
+        })
     }
 }
 
-struct VanDerPolInstance { mu: f32, dt: f32, x: f32, v: f32 }
+struct VanDerPolInstance {
+    mu: f32,
+    dt: f32,
+    x: f32,
+    v: f32,
+}
 
 impl SignalInstance for VanDerPolInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let (mu, dt) = (self.mu, self.dt);
         for s in out.iter_mut() {
             *s = self.x;
-            (self.x, self.v) = rk4_2d(self.x, self.v, dt, |x, v| {
-                (v, mu*(1.0 - x*x)*v - x)
-            });
+            (self.x, self.v) = rk4_2d(self.x, self.v, dt, |x, v| (v, mu * (1.0 - x * x) * v - x));
         }
     }
 }
@@ -1436,10 +1827,17 @@ pub struct VecSignal(pub Vec<f32>);
 
 impl Signal for VecSignal {
     fn instantiate(&self, _sr: f64) -> Box<dyn SignalInstance> {
-        Box::new(VecSignalInstance { samples: self.0.clone().into(), pos: 0 })
+        Box::new(VecSignalInstance {
+            samples: self.0.clone().into(),
+            pos: 0,
+        })
     }
-    fn len_hint(&self) -> Option<usize> { Some(self.0.len()) }
-    fn as_f32_slice(&self) -> Option<&[f32]> { Some(&self.0) }
+    fn len_hint(&self) -> Option<usize> {
+        Some(self.0.len())
+    }
+    fn as_f32_slice(&self) -> Option<&[f32]> {
+        Some(&self.0)
+    }
 }
 
 struct VecSignalInstance {
@@ -1475,11 +1873,25 @@ impl Signal for SvfFilter {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let f = (2.0 * (std::f32::consts::PI * self.freq_hz / sr as f32).sin()).min(1.99);
         let q_inv = (1.0 / self.q.max(0.1)).clamp(0.0, 2.0);
-        Box::new(SvfInstance { input: self.input.instantiate(sr), f, q: q_inv, mode: self.mode, lp: 0.0, bp: 0.0 })
+        Box::new(SvfInstance {
+            input: self.input.instantiate(sr),
+            f,
+            q: q_inv,
+            mode: self.mode,
+            lp: 0.0,
+            bp: 0.0,
+        })
     }
 }
 
-struct SvfInstance { input: Box<dyn SignalInstance>, f: f32, q: f32, mode: u8, lp: f32, bp: f32 }
+struct SvfInstance {
+    input: Box<dyn SignalInstance>,
+    f: f32,
+    q: f32,
+    mode: u8,
+    lp: f32,
+    bp: f32,
+}
 
 impl SignalInstance for SvfInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -1489,7 +1901,12 @@ impl SignalInstance for SvfInstance {
             self.bp += self.f * hp;
             self.lp += self.f * self.bp;
             let notch = *s - self.q * self.bp;
-            *s = match self.mode { 0 => self.lp, 1 => hp, 2 => self.bp, _ => notch };
+            *s = match self.mode {
+                0 => self.lp,
+                1 => hp,
+                2 => self.bp,
+                _ => notch,
+            };
         }
     }
 }
@@ -1507,19 +1924,36 @@ pub struct CompressorSignal {
 
 impl Signal for CompressorSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
-        let att = if self.attack_secs  > 0.0 { (-1.0/(self.attack_secs  as f64 * sr)).exp() as f32 } else { 0.0 };
-        let rel = if self.release_secs > 0.0 { (-1.0/(self.release_secs as f64 * sr)).exp() as f32 } else { 0.0 };
+        let att = if self.attack_secs > 0.0 {
+            (-1.0 / (self.attack_secs as f64 * sr)).exp() as f32
+        } else {
+            0.0
+        };
+        let rel = if self.release_secs > 0.0 {
+            (-1.0 / (self.release_secs as f64 * sr)).exp() as f32
+        } else {
+            0.0
+        };
         Box::new(CompressorInstance {
             input: self.input.instantiate(sr),
-            threshold_db: self.threshold_db, slope: 1.0 - 1.0 / self.ratio.max(1.0),
-            att, rel, makeup: self.makeup_db, env: 0.0,
+            threshold_db: self.threshold_db,
+            slope: 1.0 - 1.0 / self.ratio.max(1.0),
+            att,
+            rel,
+            makeup: self.makeup_db,
+            env: 0.0,
         })
     }
 }
 
 struct CompressorInstance {
     input: Box<dyn SignalInstance>,
-    threshold_db: f32, slope: f32, att: f32, rel: f32, makeup: f32, env: f32,
+    threshold_db: f32,
+    slope: f32,
+    att: f32,
+    rel: f32,
+    makeup: f32,
+    env: f32,
 }
 
 impl SignalInstance for CompressorInstance {
@@ -1529,8 +1963,16 @@ impl SignalInstance for CompressorInstance {
             let abs = s.abs();
             let c = if abs > self.env { self.att } else { self.rel };
             self.env = self.env * c + abs * (1.0 - c);
-            let env_db = if self.env > 1e-6 { 20.0 * self.env.log10() } else { -120.0 };
-            let gain_db = (if env_db > self.threshold_db { -self.slope*(env_db - self.threshold_db) } else { 0.0 }) + self.makeup;
+            let env_db = if self.env > 1e-6 {
+                20.0 * self.env.log10()
+            } else {
+                -120.0
+            };
+            let gain_db = (if env_db > self.threshold_db {
+                -self.slope * (env_db - self.threshold_db)
+            } else {
+                0.0
+            }) + self.makeup;
             *s *= 10.0_f32.powf(gain_db / 20.0);
         }
     }
@@ -1539,98 +1981,152 @@ impl SignalInstance for CompressorInstance {
 // ---- Window functions -------------------------------------------------------
 
 pub fn hann_window(n: usize) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let n1 = (n - 1).max(1) as f64;
-    (0..n).map(|i| (0.5 * (1.0 - (std::f64::consts::TAU * i as f64 / n1).cos())) as f32).collect()
+    (0..n)
+        .map(|i| (0.5 * (1.0 - (std::f64::consts::TAU * i as f64 / n1).cos())) as f32)
+        .collect()
 }
 
 pub fn hamming_window(n: usize) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let n1 = (n - 1).max(1) as f64;
-    (0..n).map(|i| (0.54 - 0.46 * (std::f64::consts::TAU * i as f64 / n1).cos()) as f32).collect()
+    (0..n)
+        .map(|i| (0.54 - 0.46 * (std::f64::consts::TAU * i as f64 / n1).cos()) as f32)
+        .collect()
 }
 
 pub fn blackman_window(n: usize) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let n1 = (n - 1).max(1) as f64;
-    (0..n).map(|i| {
-        let t = std::f64::consts::TAU * i as f64 / n1;
-        (0.42 - 0.5*t.cos() + 0.08*(2.0*t).cos()) as f32
-    }).collect()
+    (0..n)
+        .map(|i| {
+            let t = std::f64::consts::TAU * i as f64 / n1;
+            (0.42 - 0.5 * t.cos() + 0.08 * (2.0 * t).cos()) as f32
+        })
+        .collect()
 }
 
 pub fn blackman_harris_window(n: usize) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let n1 = (n - 1).max(1) as f64;
-    (0..n).map(|i| {
-        let p = std::f64::consts::TAU * i as f64 / n1;
-        (0.35875 - 0.48829*p.cos() + 0.14128*(2.0*p).cos() - 0.01168*(3.0*p).cos()) as f32
-    }).collect()
+    (0..n)
+        .map(|i| {
+            let p = std::f64::consts::TAU * i as f64 / n1;
+            (0.35875 - 0.48829 * p.cos() + 0.14128 * (2.0 * p).cos() - 0.01168 * (3.0 * p).cos())
+                as f32
+        })
+        .collect()
 }
 
 pub fn nuttall_window(n: usize) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let n1 = (n - 1).max(1) as f64;
-    (0..n).map(|i| {
-        let p = std::f64::consts::TAU * i as f64 / n1;
-        (0.355768 - 0.487396*p.cos() + 0.144232*(2.0*p).cos() - 0.012604*(3.0*p).cos()) as f32
-    }).collect()
+    (0..n)
+        .map(|i| {
+            let p = std::f64::consts::TAU * i as f64 / n1;
+            (0.355768 - 0.487396 * p.cos() + 0.144232 * (2.0 * p).cos()
+                - 0.012604 * (3.0 * p).cos()) as f32
+        })
+        .collect()
 }
 
 pub fn flat_top_window(n: usize) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let n1 = (n - 1).max(1) as f64;
-    (0..n).map(|i| {
-        let p = std::f64::consts::TAU * i as f64 / n1;
-        (0.21557895 - 0.41663158*p.cos() + 0.277263158*(2.0*p).cos()
-            - 0.083578947*(3.0*p).cos() + 0.006947368*(4.0*p).cos()) as f32
-    }).collect()
+    (0..n)
+        .map(|i| {
+            let p = std::f64::consts::TAU * i as f64 / n1;
+            (0.21557895 - 0.41663158 * p.cos() + 0.277263158 * (2.0 * p).cos()
+                - 0.083578947 * (3.0 * p).cos()
+                + 0.006947368 * (4.0 * p).cos()) as f32
+        })
+        .collect()
 }
 
 pub fn gaussian_window(n: usize, sigma: f64) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let center = (n - 1) as f64 / 2.0;
-    (0..n).map(|i| {
-        let x = if center == 0.0 { 0.0 } else { (i as f64 - center) / (sigma * center) };
-        (-0.5 * x * x).exp() as f32
-    }).collect()
+    (0..n)
+        .map(|i| {
+            let x = if center == 0.0 {
+                0.0
+            } else {
+                (i as f64 - center) / (sigma * center)
+            };
+            (-0.5 * x * x).exp() as f32
+        })
+        .collect()
 }
 
 fn bessel_i0(x: f64) -> f64 {
-    let mut sum = 1.0f64; let mut term = 1.0f64;
+    let mut sum = 1.0f64;
+    let mut term = 1.0f64;
     let xh = x / 2.0;
     for k in 1u32..=40 {
         term *= (xh / k as f64).powi(2);
         sum += term;
-        if term.abs() < 1e-15 * sum.abs() { break; }
+        if term.abs() < 1e-15 * sum.abs() {
+            break;
+        }
     }
     sum
 }
 
 pub fn kaiser_window(n: usize, beta: f64) -> Vec<f32> {
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let i0b = bessel_i0(beta);
     let center = (n - 1) as f64 / 2.0;
-    (0..n).map(|i| {
-        let x = if center == 0.0 { 0.0 } else { (i as f64 - center) / center };
-        (bessel_i0(beta * (1.0 - x*x).max(0.0).sqrt()) / i0b) as f32
-    }).collect()
+    (0..n)
+        .map(|i| {
+            let x = if center == 0.0 {
+                0.0
+            } else {
+                (i as f64 - center) / center
+            };
+            (bessel_i0(beta * (1.0 - x * x).max(0.0).sqrt()) / i0b) as f32
+        })
+        .collect()
 }
 
 // ---- Hilbert FIR (type-III linear-phase 90° shift) -------------------------
 
-pub struct HilbertFilter { pub input: Arc<dyn Signal> }
+pub struct HilbertFilter {
+    pub input: Arc<dyn Signal>,
+}
 
 pub fn hilbert_coeffs() -> Vec<f32> {
     let n = 63usize;
     let w = blackman_harris_window(n);
     let c = (n / 2) as f64;
-    (0..n).map(|k| {
-        let m = k as f64 - c;
-        if m == 0.0 { 0.0 }
-        else if (m as i64).abs() % 2 == 1 { (2.0 / (std::f64::consts::PI * m) * w[k] as f64) as f32 }
-        else { 0.0 }
-    }).collect()
+    (0..n)
+        .map(|k| {
+            let m = k as f64 - c;
+            if m == 0.0 {
+                0.0
+            } else if (m as i64).abs() % 2 == 1 {
+                (2.0 / (std::f64::consts::PI * m) * w[k] as f64) as f32
+            } else {
+                0.0
+            }
+        })
+        .collect()
 }
 
 // Shared FIR convolution — used by Hilbert and windowed-sinc filters.
@@ -1645,11 +2141,15 @@ impl SignalInstance for FirInstance {
     fn fill(&mut self, out: &mut [f32]) {
         self.input.fill(out);
         let n = self.coeffs.len();
-        if n == 0 { return; }
+        if n == 0 {
+            return;
+        }
         for s in out.iter_mut() {
             self.buffer[self.pos] = *s;
             let mut y = 0.0f32;
-            for k in 0..n { y += self.coeffs[k] * self.buffer[(self.pos + n - k) % n]; }
+            for k in 0..n {
+                y += self.coeffs[k] * self.buffer[(self.pos + n - k) % n];
+            }
             self.pos = (self.pos + 1) % n;
             *s = y;
         }
@@ -1660,18 +2160,31 @@ impl Signal for HilbertFilter {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let coeffs = hilbert_coeffs();
         let n = coeffs.len();
-        Box::new(FirInstance { input: self.input.instantiate(sr), coeffs, buffer: vec![0.0f32; n], pos: 0 })
+        Box::new(FirInstance {
+            input: self.input.instantiate(sr),
+            coeffs,
+            buffer: vec![0.0f32; n],
+            pos: 0,
+        })
     }
 }
 
 // ---- Windowed-sinc FIR design -----------------------------------------------
 
-pub struct FirFilterSignal { pub input: Arc<dyn Signal>, pub coeffs: Vec<f32> }
+pub struct FirFilterSignal {
+    pub input: Arc<dyn Signal>,
+    pub coeffs: Vec<f32>,
+}
 
 impl Signal for FirFilterSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let n = self.coeffs.len();
-        Box::new(FirInstance { input: self.input.instantiate(sr), coeffs: self.coeffs.clone(), buffer: vec![0.0f32; n.max(1)], pos: 0 })
+        Box::new(FirInstance {
+            input: self.input.instantiate(sr),
+            coeffs: self.coeffs.clone(),
+            buffer: vec![0.0f32; n.max(1)],
+            pos: 0,
+        })
     }
 }
 
@@ -1679,18 +2192,28 @@ pub fn fir_coeffs_lp(cutoff_hz: f64, sr: f64, n_taps: usize) -> Vec<f32> {
     let fc = cutoff_hz / sr;
     let center = (n_taps - 1) as f64 / 2.0;
     let w = blackman_harris_window(n_taps);
-    (0..n_taps).map(|i| {
-        let m = i as f64 - center;
-        let sinc = if m == 0.0 { 2.0*fc } else { (std::f64::consts::TAU*fc*m).sin() / (std::f64::consts::PI*m) };
-        (sinc * w[i] as f64) as f32
-    }).collect()
+    (0..n_taps)
+        .map(|i| {
+            let m = i as f64 - center;
+            let sinc = if m == 0.0 {
+                2.0 * fc
+            } else {
+                (std::f64::consts::TAU * fc * m).sin() / (std::f64::consts::PI * m)
+            };
+            (sinc * w[i] as f64) as f32
+        })
+        .collect()
 }
 
 pub fn fir_coeffs_hp(cutoff_hz: f64, sr: f64, n_taps: usize) -> Vec<f32> {
     let mut c = fir_coeffs_lp(cutoff_hz, sr, n_taps);
     let ctr = n_taps / 2;
-    for v in c.iter_mut() { *v = -*v; }
-    if ctr < c.len() { c[ctr] += 1.0; }
+    for v in c.iter_mut() {
+        *v = -*v;
+    }
+    if ctr < c.len() {
+        c[ctr] += 1.0;
+    }
     c
 }
 
@@ -1717,8 +2240,9 @@ fn hadamard_in_place(x: &mut [f32]) {
         let mut i = 0;
         while i < n {
             for j in i..i + h {
-                let a = x[j]; let b = x[j + h];
-                x[j]     = (a + b) * norm;
+                let a = x[j];
+                let b = x[j + h];
+                x[j] = (a + b) * norm;
                 x[j + h] = (a - b) * norm;
             }
             i += h * 2;
@@ -1730,29 +2254,47 @@ fn hadamard_in_place(x: &mut [f32]) {
 impl Signal for FdnReverb {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
         let n = self.n_lines.next_power_of_two().clamp(2, 16);
-        let base_ms: &[f32] = &[29.7, 37.1, 41.1, 53.5, 59.3, 67.7, 73.9, 83.3,
-                                  89.1, 97.0, 101.3, 113.9, 127.1, 131.3, 137.7, 149.1];
-        let delays: Vec<usize> = base_ms[..n].iter()
+        let base_ms: &[f32] = &[
+            29.7, 37.1, 41.1, 53.5, 59.3, 67.7, 73.9, 83.3, 89.1, 97.0, 101.3, 113.9, 127.1, 131.3,
+            137.7, 149.1,
+        ];
+        let delays: Vec<usize> = base_ms[..n]
+            .iter()
             .map(|&ms| ((ms * self.room_size * sr as f32 / 1000.0).round() as usize).max(2))
             .collect();
         let max_d = delays.iter().copied().max().unwrap_or(2);
-        let g: Vec<f32> = delays.iter().map(|&d| {
-            if self.decay_secs > 0.0 { 10.0_f32.powf(-3.0*d as f32 / (sr as f32*self.decay_secs)) } else { 0.0 }
-        }).collect();
+        let g: Vec<f32> = delays
+            .iter()
+            .map(|&d| {
+                if self.decay_secs > 0.0 {
+                    10.0_f32.powf(-3.0 * d as f32 / (sr as f32 * self.decay_secs))
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         Box::new(FdnInstance {
-            input: self.input.instantiate(sr), n, delays, g,
+            input: self.input.instantiate(sr),
+            n,
+            delays,
+            g,
             buffers: vec![vec![0.0f32; max_d + 1]; n],
             write_pos: 0,
-            state: vec![0.0f32; n], temp: vec![0.0f32; n],
+            state: vec![0.0f32; n],
+            temp: vec![0.0f32; n],
         })
     }
 }
 
 struct FdnInstance {
-    input: Box<dyn SignalInstance>, n: usize,
-    delays: Vec<usize>, g: Vec<f32>,
-    buffers: Vec<Vec<f32>>, write_pos: usize,
-    state: Vec<f32>, temp: Vec<f32>,
+    input: Box<dyn SignalInstance>,
+    n: usize,
+    delays: Vec<usize>,
+    g: Vec<f32>,
+    buffers: Vec<Vec<f32>>,
+    write_pos: usize,
+    state: Vec<f32>,
+    temp: Vec<f32>,
 }
 
 impl SignalInstance for FdnInstance {
@@ -1781,29 +2323,54 @@ impl SignalInstance for FdnInstance {
 // ---- Waveshaping ------------------------------------------------------------
 
 #[derive(Clone, Copy)]
-pub enum WaveShapeMode { Tanh, SoftClip, HardClip, Cubic, Atan, Chebyshev(u8) }
+pub enum WaveShapeMode {
+    Tanh,
+    SoftClip,
+    HardClip,
+    Cubic,
+    Atan,
+    Chebyshev(u8),
+}
 
-pub struct WaveShaperSignal { pub input: Arc<dyn Signal>, pub mode: WaveShapeMode, pub amount: f32 }
+pub struct WaveShaperSignal {
+    pub input: Arc<dyn Signal>,
+    pub mode: WaveShapeMode,
+    pub amount: f32,
+}
 
 fn chebychev_eval(order: u8, x: f32) -> f32 {
     let x = x.clamp(-1.0, 1.0);
-    if order == 0 { return 1.0; }
-    let mut t_prev = 1.0f32; let mut t_cur = x;
-    if order == 1 { return t_cur; }
+    if order == 0 {
+        return 1.0;
+    }
+    let mut t_prev = 1.0f32;
+    let mut t_cur = x;
+    if order == 1 {
+        return t_cur;
+    }
     for _ in 2..=order {
-        let t_next = 2.0*x*t_cur - t_prev;
-        t_prev = t_cur; t_cur = t_next;
+        let t_next = 2.0 * x * t_cur - t_prev;
+        t_prev = t_cur;
+        t_cur = t_next;
     }
     t_cur
 }
 
 impl Signal for WaveShaperSignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
-        Box::new(WaveShaperInstance { input: self.input.instantiate(sr), mode: self.mode, amount: self.amount })
+        Box::new(WaveShaperInstance {
+            input: self.input.instantiate(sr),
+            mode: self.mode,
+            amount: self.amount,
+        })
     }
 }
 
-struct WaveShaperInstance { input: Box<dyn SignalInstance>, mode: WaveShapeMode, amount: f32 }
+struct WaveShaperInstance {
+    input: Box<dyn SignalInstance>,
+    mode: WaveShapeMode,
+    amount: f32,
+}
 
 impl SignalInstance for WaveShaperInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -1811,12 +2378,20 @@ impl SignalInstance for WaveShaperInstance {
         let a = self.amount;
         for s in out.iter_mut() {
             *s = match self.mode {
-                WaveShapeMode::Tanh      => (a * *s).tanh(),
-                WaveShapeMode::SoftClip  => { let x = *s * a; x / (1.0 + x.abs()) }
-                WaveShapeMode::HardClip  => (*s * a).clamp(-1.0, 1.0),
-                WaveShapeMode::Cubic     => { let x = (*s * a).clamp(-1.0, 1.0); x - x*x*x/3.0 }
-                WaveShapeMode::Atan      => (*s * a).atan() / std::f32::consts::FRAC_PI_2,
-                WaveShapeMode::Chebyshev(order) => chebychev_eval(order, *s * a.min(1.0)).clamp(-1.0, 1.0),
+                WaveShapeMode::Tanh => (a * *s).tanh(),
+                WaveShapeMode::SoftClip => {
+                    let x = *s * a;
+                    x / (1.0 + x.abs())
+                }
+                WaveShapeMode::HardClip => (*s * a).clamp(-1.0, 1.0),
+                WaveShapeMode::Cubic => {
+                    let x = (*s * a).clamp(-1.0, 1.0);
+                    x - x * x * x / 3.0
+                }
+                WaveShapeMode::Atan => (*s * a).atan() / std::f32::consts::FRAC_PI_2,
+                WaveShapeMode::Chebyshev(order) => {
+                    chebychev_eval(order, *s * a.min(1.0)).clamp(-1.0, 1.0)
+                }
             };
         }
     }
@@ -1825,10 +2400,12 @@ impl SignalInstance for WaveShaperInstance {
 // ---- Phase Vocoder (offline: time-stretch and pitch-shift) ------------------
 
 pub fn pvoc_stretch(samples: &[f32], fft_size: usize, hop_in: usize, stretch: f32) -> Vec<f32> {
-    use realfft::RealFftPlanner;
     use num_complex::Complex;
+    use realfft::RealFftPlanner;
     let n = samples.len();
-    if n == 0 || fft_size < 4 { return vec![]; }
+    if n == 0 || fft_size < 4 {
+        return vec![];
+    }
     let fft_n = fft_size.next_power_of_two();
     let hop_out = ((hop_in as f32 * stretch).round() as usize).max(1);
     let n_frames = n.div_ceil(hop_in);
@@ -1841,15 +2418,21 @@ pub fn pvoc_stretch(samples: &[f32], fft_size: usize, hop_in: usize, stretch: f3
     let window = hann_window(fft_n);
 
     let mut output = vec![0.0f32; out_len];
-    let mut phase_acc  = vec![0.0f32; bin_count];
+    let mut phase_acc = vec![0.0f32; bin_count];
     let mut prev_phase = vec![0.0f32; bin_count];
 
     for frame in 0..n_frames {
         let in_start = frame * hop_in;
-        let mut frame_buf: Vec<f32> = (0..fft_n).map(|k| {
-            let idx = in_start + k;
-            if idx < n { samples[idx] * window[k] } else { 0.0 }
-        }).collect();
+        let mut frame_buf: Vec<f32> = (0..fft_n)
+            .map(|k| {
+                let idx = in_start + k;
+                if idx < n {
+                    samples[idx] * window[k]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         let mut spectrum = r2c.make_output_vec();
         let _ = r2c.process(&mut frame_buf, &mut spectrum);
 
@@ -1885,14 +2468,20 @@ pub fn pvoc_pitch(samples: &[f32], fft_size: usize, hop: usize, semitones: f32) 
     let stretched = pvoc_stretch(samples, fft_size, hop, ratio);
     let out_len = samples.len();
     let src_len = stretched.len();
-    if src_len == 0 || out_len == 0 { return vec![0.0; out_len]; }
-    (0..out_len).map(|i| {
-        let sp = i as f32 * src_len as f32 / out_len as f32;
-        let si = sp as usize;
-        let frac = sp - si as f32;
-        stretched.get(si).copied().unwrap_or(0.0)
-            + frac * (stretched.get(si + 1).copied().unwrap_or(0.0) - stretched.get(si).copied().unwrap_or(0.0))
-    }).collect()
+    if src_len == 0 || out_len == 0 {
+        return vec![0.0; out_len];
+    }
+    (0..out_len)
+        .map(|i| {
+            let sp = i as f32 * src_len as f32 / out_len as f32;
+            let si = sp as usize;
+            let frac = sp - si as f32;
+            stretched.get(si).copied().unwrap_or(0.0)
+                + frac
+                    * (stretched.get(si + 1).copied().unwrap_or(0.0)
+                        - stretched.get(si).copied().unwrap_or(0.0))
+        })
+        .collect()
 }
 
 // ---- Granular synthesis -----------------------------------------------------
@@ -1908,12 +2497,24 @@ pub struct GranularSynth {
     pub seed: u64,
 }
 
-struct GrainState { pos: f32, rate: f32, total: usize, env_pos: usize }
+struct GrainState {
+    pos: f32,
+    rate: f32,
+    total: usize,
+    env_pos: usize,
+}
 
 struct GranularInstance {
-    source: Vec<f32>, grain_samps: usize, trigger_interval: usize,
-    position: f32, position_spread: f32, pitch: f32, pitch_spread: f32,
-    seed: u64, grains: Vec<GrainState>, countdown: usize,
+    source: Vec<f32>,
+    grain_samps: usize,
+    trigger_interval: usize,
+    position: f32,
+    position_spread: f32,
+    pitch: f32,
+    pitch_spread: f32,
+    seed: u64,
+    grains: Vec<GrainState>,
+    countdown: usize,
 }
 
 impl Signal for GranularSynth {
@@ -1921,10 +2522,16 @@ impl Signal for GranularSynth {
         let grain_samps = ((self.grain_dur_secs as f64 * sr) as usize).max(2);
         let trigger_interval = ((sr / self.density.max(0.01) as f64) as usize).max(1);
         Box::new(GranularInstance {
-            source: self.source.0.clone(), grain_samps, trigger_interval,
-            position: self.position.clamp(0.0, 1.0), position_spread: self.position_spread,
-            pitch: self.pitch, pitch_spread: self.pitch_spread,
-            seed: self.seed, grains: Vec::new(), countdown: 0,
+            source: self.source.0.clone(),
+            grain_samps,
+            trigger_interval,
+            position: self.position.clamp(0.0, 1.0),
+            position_spread: self.position_spread,
+            pitch: self.pitch,
+            pitch_spread: self.pitch_spread,
+            seed: self.seed,
+            grains: Vec::new(),
+            countdown: 0,
         })
     }
 }
@@ -1932,26 +2539,38 @@ impl Signal for GranularSynth {
 impl SignalInstance for GranularInstance {
     fn fill(&mut self, out: &mut [f32]) {
         let src_len = self.source.len();
-        if src_len == 0 { out.fill(0.0); return; }
+        if src_len == 0 {
+            out.fill(0.0);
+            return;
+        }
         for s in out.iter_mut() {
             if self.countdown == 0 {
                 let r1 = lcg_next(&mut self.seed);
                 let pos = (self.position + r1 * 0.5 * self.position_spread).clamp(0.0, 1.0);
                 let r2 = lcg_next(&mut self.seed);
                 let rate = self.pitch * 2.0_f32.powf(r2 * self.pitch_spread / 12.0);
-                self.grains.push(GrainState { pos: pos * src_len as f32, rate, total: self.grain_samps, env_pos: 0 });
+                self.grains.push(GrainState {
+                    pos: pos * src_len as f32,
+                    rate,
+                    total: self.grain_samps,
+                    env_pos: 0,
+                });
                 self.countdown = self.trigger_interval;
-            } else { self.countdown -= 1; }
+            } else {
+                self.countdown -= 1;
+            }
 
             let mut mix = 0.0f32;
             let mut gi = 0;
             while gi < self.grains.len() {
-                let pi     = self.grains[gi].pos as usize;
-                let frac   = self.grains[gi].pos - pi as f32;
-                let env_p  = self.grains[gi].env_pos;
-                let total  = self.grains[gi].total;
-                let rate   = self.grains[gi].rate;
-                let env = (std::f32::consts::PI * env_p as f32 / total.max(1) as f32).sin().powi(2);
+                let pi = self.grains[gi].pos as usize;
+                let frac = self.grains[gi].pos - pi as f32;
+                let env_p = self.grains[gi].env_pos;
+                let total = self.grains[gi].total;
+                let rate = self.grains[gi].rate;
+                let env = (std::f32::consts::PI * env_p as f32 / total.max(1) as f32)
+                    .sin()
+                    .powi(2);
                 let a = self.source.get(pi).copied().unwrap_or(0.0);
                 let b = self.source.get(pi + 1).copied().unwrap_or(0.0);
                 mix += (a + frac * (b - a)) * env;
@@ -1959,7 +2578,9 @@ impl SignalInstance for GranularInstance {
                 self.grains[gi].env_pos += 1;
                 if self.grains[gi].env_pos >= self.grains[gi].total {
                     self.grains.swap_remove(gi);
-                } else { gi += 1; }
+                } else {
+                    gi += 1;
+                }
             }
             *s = mix;
         }
@@ -1970,10 +2591,16 @@ impl SignalInstance for GranularInstance {
 
 pub fn lpc_analyze(signal: &[f32], order: usize) -> Vec<f32> {
     let n = signal.len();
-    if n == 0 || order == 0 { return vec![0.0; order]; }
-    let r: Vec<f64> = (0..=order).map(|lag| {
-        (0..n.saturating_sub(lag)).map(|i| signal[i] as f64 * signal[i + lag] as f64).sum::<f64>()
-    }).collect();
+    if n == 0 || order == 0 {
+        return vec![0.0; order];
+    }
+    let r: Vec<f64> = (0..=order)
+        .map(|lag| {
+            (0..n.saturating_sub(lag))
+                .map(|i| signal[i] as f64 * signal[i + lag] as f64)
+                .sum::<f64>()
+        })
+        .collect();
     let mut a = vec![0.0f64; order + 1];
     a[0] = 1.0;
     let mut err = r[0];
@@ -1981,7 +2608,9 @@ pub fn lpc_analyze(signal: &[f32], order: usize) -> Vec<f32> {
         let num: f64 = (0..i).map(|j| a[j] * r[i - j]).sum::<f64>();
         let k = if err.abs() < 1e-15 { 0.0 } else { -num / err };
         let mut a2 = a.clone();
-        for j in 1..i { a2[j] = a[j] + k * a[i - j]; }
+        for j in 1..i {
+            a2[j] = a[j] + k * a[i - j];
+        }
         a2[i] = k;
         a = a2;
         err *= 1.0 - k * k;
@@ -1993,7 +2622,9 @@ pub fn lpc_synthesize(excitation: &[f32], coeffs: &[f32]) -> Vec<f32> {
     let order = coeffs.len();
     let mut out = vec![0.0f32; excitation.len()];
     for n in 0..excitation.len() {
-        let fb: f32 = (1..=order.min(n)).map(|k| -coeffs[k-1] * out[n-k]).sum();
+        let fb: f32 = (1..=order.min(n))
+            .map(|k| -coeffs[k - 1] * out[n - k])
+            .sum();
         out[n] = excitation[n] + fb;
     }
     out
@@ -2009,24 +2640,31 @@ fn goertzel_run(samples: &[f32], freq_hz: f64, sr: f64) -> (f64, f64, f64, usize
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for &x in samples {
         let s0 = coeff * s1 - s2 + x as f64;
-        s2 = s1; s1 = s0;
+        s2 = s1;
+        s1 = s0;
     }
     (s1, s2, omega, samples.len())
 }
 
 pub fn goertzel_magnitude(samples: &[f32], freq_hz: f64, sr: f64) -> f32 {
-    if samples.is_empty() { return 0.0; }
+    if samples.is_empty() {
+        return 0.0;
+    }
     let (s1, s2, omega, n) = goertzel_run(samples, freq_hz, sr);
     let re = s1 - s2 * omega.cos();
     let im = s2 * omega.sin();
-    ((re*re + im*im).sqrt() / n as f64) as f32
+    ((re * re + im * im).sqrt() / n as f64) as f32
 }
 
 pub fn goertzel_complex(samples: &[f32], freq_hz: f64, sr: f64) -> (f32, f32) {
-    if samples.is_empty() { return (0.0, 0.0); }
+    if samples.is_empty() {
+        return (0.0, 0.0);
+    }
     let (s1, s2, omega, n) = goertzel_run(samples, freq_hz, sr);
-    (((s1 - s2*omega.cos()) / n as f64) as f32,
-     ((s2 * omega.sin())    / n as f64) as f32)
+    (
+        ((s1 - s2 * omega.cos()) / n as f64) as f32,
+        ((s2 * omega.sin()) / n as f64) as f32,
+    )
 }
 
 // ---- MDCT / IMDCT -----------------------------------------------------------
@@ -2034,34 +2672,54 @@ pub fn goertzel_complex(samples: &[f32], freq_hz: f64, sr: f64) -> (f32, f32) {
 pub fn mdct(samples: &[f32]) -> Vec<f32> {
     let n = samples.len();
     let m = n / 2;
-    if m == 0 { return vec![]; }
+    if m == 0 {
+        return vec![];
+    }
     let scale = (2.0 / n as f64).sqrt();
-    (0..m).map(|k| {
-        let sum: f64 = (0..n).map(|i| {
-            let a = std::f64::consts::PI / n as f64 * (i as f64 + 0.5 + m as f64 / 2.0) * (k as f64 + 0.5);
-            samples[i] as f64 * a.cos()
-        }).sum();
-        (scale * sum) as f32
-    }).collect()
+    (0..m)
+        .map(|k| {
+            let sum: f64 = (0..n)
+                .map(|i| {
+                    let a = std::f64::consts::PI / n as f64
+                        * (i as f64 + 0.5 + m as f64 / 2.0)
+                        * (k as f64 + 0.5);
+                    samples[i] as f64 * a.cos()
+                })
+                .sum();
+            (scale * sum) as f32
+        })
+        .collect()
 }
 
 pub fn imdct(coeffs: &[f32]) -> Vec<f32> {
     let m = coeffs.len();
     let n = m * 2;
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let scale = (2.0 / n as f64).sqrt();
-    (0..n).map(|i| {
-        let sum: f64 = (0..m).map(|k| {
-            let a = std::f64::consts::PI / n as f64 * (i as f64 + 0.5 + m as f64 / 2.0) * (k as f64 + 0.5);
-            coeffs[k] as f64 * a.cos()
-        }).sum();
-        (scale * sum) as f32
-    }).collect()
+    (0..n)
+        .map(|i| {
+            let sum: f64 = (0..m)
+                .map(|k| {
+                    let a = std::f64::consts::PI / n as f64
+                        * (i as f64 + 0.5 + m as f64 / 2.0)
+                        * (k as f64 + 0.5);
+                    coeffs[k] as f64 * a.cos()
+                })
+                .sum();
+            (scale * sum) as f32
+        })
+        .collect()
 }
 
 // ---- Thiran allpass (maximally-flat fractional delay) -----------------------
 
-pub struct ThiranAllpass { pub input: Arc<dyn Signal>, pub delay_samples: f64, pub order: usize }
+pub struct ThiranAllpass {
+    pub input: Arc<dyn Signal>,
+    pub delay_samples: f64,
+    pub order: usize,
+}
 
 fn thiran_coeffs(d: f64, order: usize) -> Vec<f64> {
     let mut a = vec![0.0f64; order + 1];
@@ -2069,13 +2727,21 @@ fn thiran_coeffs(d: f64, order: usize) -> Vec<f64> {
     #[allow(clippy::needless_range_loop)] // k used in binomial math, not just as array index
     for k in 1..=order {
         let mut binom = 1usize;
-        for j in 0..k { binom = binom * (order - j) / (j + 1); }
+        for j in 0..k {
+            binom = binom * (order - j) / (j + 1);
+        }
         let sign = if k % 2 == 0 { 1.0f64 } else { -1.0 };
-        let prod: f64 = (0..=order).map(|i| {
-            let num = d - order as f64 + i as f64;
-            let den = d - order as f64 + k as f64 + i as f64;
-            if den.abs() < 1e-12 { 1.0 } else { num / den }
-        }).product();
+        let prod: f64 = (0..=order)
+            .map(|i| {
+                let num = d - order as f64 + i as f64;
+                let den = d - order as f64 + k as f64 + i as f64;
+                if den.abs() < 1e-12 {
+                    1.0
+                } else {
+                    num / den
+                }
+            })
+            .product();
         a[k] = sign * binom as f64 * prod;
     }
     a
@@ -2088,13 +2754,24 @@ impl Signal for ThiranAllpass {
         let a = thiran_coeffs(d, order);
         let buf_n = order + 1;
         Box::new(ThiranInstance {
-            input: self.input.instantiate(sr), a, order,
-            x_buf: vec![0.0f32; buf_n], y_buf: vec![0.0f32; buf_n], pos: 0,
+            input: self.input.instantiate(sr),
+            a,
+            order,
+            x_buf: vec![0.0f32; buf_n],
+            y_buf: vec![0.0f32; buf_n],
+            pos: 0,
         })
     }
 }
 
-struct ThiranInstance { input: Box<dyn SignalInstance>, a: Vec<f64>, order: usize, x_buf: Vec<f32>, y_buf: Vec<f32>, pos: usize }
+struct ThiranInstance {
+    input: Box<dyn SignalInstance>,
+    a: Vec<f64>,
+    order: usize,
+    x_buf: Vec<f32>,
+    y_buf: Vec<f32>,
+    pos: usize,
+}
 
 impl SignalInstance for ThiranInstance {
     fn fill(&mut self, out: &mut [f32]) {
@@ -2133,14 +2810,19 @@ impl Signal for FarrowDelay {
             delay_mod: self.delay_signal.instantiate(sr),
             buffer: vec![0.0f32; max_d],
             delay_buf: vec![0.0f32; 512],
-            pos: 0, max_d,
+            pos: 0,
+            max_d,
         })
     }
 }
 
 struct FarrowInstance {
-    input: Box<dyn SignalInstance>, delay_mod: Box<dyn SignalInstance>,
-    buffer: Vec<f32>, delay_buf: Vec<f32>, pos: usize, max_d: usize,
+    input: Box<dyn SignalInstance>,
+    delay_mod: Box<dyn SignalInstance>,
+    buffer: Vec<f32>,
+    delay_buf: Vec<f32>,
+    pos: usize,
+    max_d: usize,
 }
 
 impl SignalInstance for FarrowInstance {
@@ -2160,13 +2842,16 @@ impl SignalInstance for FarrowInstance {
             // Catmull-Rom: at mu=0 → p[1] (di samples back), mu=1 → p[2]
             let p = [
                 self.buffer[(self.pos + blen - di - 1) % blen],
-                self.buffer[(self.pos + blen - di    ) % blen],
+                self.buffer[(self.pos + blen - di) % blen],
                 self.buffer[(self.pos + blen - di + 1) % blen],
                 self.buffer[(self.pos + blen - di + 2) % blen],
             ];
-            let y = p[1] + 0.5 * mu * (p[2] - p[0]
-                + mu * (2.0*p[0] - 5.0*p[1] + 4.0*p[2] - p[3]
-                + mu * (-p[0] + 3.0*p[1] - 3.0*p[2] + p[3])));
+            let y = p[1]
+                + 0.5
+                    * mu
+                    * (p[2] - p[0]
+                        + mu * (2.0 * p[0] - 5.0 * p[1] + 4.0 * p[2] - p[3]
+                            + mu * (-p[0] + 3.0 * p[1] - 3.0 * p[2] + p[3])));
             self.pos = (self.pos + 1) % blen;
             out[k] = y;
         }
@@ -2175,16 +2860,30 @@ impl SignalInstance for FarrowInstance {
 
 // ---- CQT (Constant-Q Transform) magnitude spectrum -------------------------
 
-pub fn cqt_magnitudes(samples: &[f32], sr: f64, bins_per_octave: usize, f_min: f64, n_bins: usize) -> Vec<f32> {
-    if samples.is_empty() || n_bins == 0 || bins_per_octave == 0 { return vec![]; }
+pub fn cqt_magnitudes(
+    samples: &[f32],
+    sr: f64,
+    bins_per_octave: usize,
+    f_min: f64,
+    n_bins: usize,
+) -> Vec<f32> {
+    if samples.is_empty() || n_bins == 0 || bins_per_octave == 0 {
+        return vec![];
+    }
     let q = 1.0 / (2.0_f64.powf(1.0 / bins_per_octave as f64) - 1.0);
-    (0..n_bins).map(|k| {
-        let f_k = f_min * 2.0_f64.powf(k as f64 / bins_per_octave as f64);
-        let n_k = ((q * sr / f_k).round() as usize).min(samples.len()).max(1);
-        let window = hann_window(n_k);
-        let windowed: Vec<f32> = samples[..n_k].iter().zip(window.iter()).map(|(&x, &w)| x * w).collect();
-        goertzel_magnitude(&windowed, f_k, sr)
-    }).collect()
+    (0..n_bins)
+        .map(|k| {
+            let f_k = f_min * 2.0_f64.powf(k as f64 / bins_per_octave as f64);
+            let n_k = ((q * sr / f_k).round() as usize).min(samples.len()).max(1);
+            let window = hann_window(n_k);
+            let windowed: Vec<f32> = samples[..n_k]
+                .iter()
+                .zip(window.iter())
+                .map(|(&x, &w)| x * w)
+                .collect();
+            goertzel_magnitude(&windowed, f_k, sr)
+        })
+        .collect()
 }
 
 // ---- FFT (real-to-complex magnitude spectrum) --------------------------------
@@ -2194,7 +2893,9 @@ pub fn cqt_magnitudes(samples: &[f32], sr: f64, bins_per_octave: usize, f_min: f
 pub fn fft_magnitude(samples: &[f32]) -> Vec<f32> {
     use realfft::RealFftPlanner;
     let n = samples.len();
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let mut planner = RealFftPlanner::<f32>::new();
     let r2c = planner.plan_fft_forward(n);
     let mut input = samples.to_vec();
@@ -2202,18 +2903,26 @@ pub fn fft_magnitude(samples: &[f32]) -> Vec<f32> {
     if r2c.process(&mut input, &mut spectrum).is_err() {
         return vec![0.0; n / 2 + 1];
     }
-    spectrum.iter().map(|c| (c.re * c.re + c.im * c.im).sqrt()).collect()
+    spectrum
+        .iter()
+        .map(|c| (c.re * c.re + c.im * c.im).sqrt())
+        .collect()
 }
 
 /// Reconstruct a signal from a magnitude spectrum (zero-phase IFFT).
 pub fn ifft_from_magnitude(mags: &[f32]) -> Vec<f32> {
     use realfft::RealFftPlanner;
-    if mags.is_empty() { return vec![]; }
+    if mags.is_empty() {
+        return vec![];
+    }
     let n = (mags.len() - 1) * 2;
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
     let mut planner = RealFftPlanner::<f32>::new();
     let c2r = planner.plan_fft_inverse(n);
-    let mut spectrum: Vec<num_complex::Complex<f32>> = mags.iter()
+    let mut spectrum: Vec<num_complex::Complex<f32>> = mags
+        .iter()
         .map(|&m| num_complex::Complex::new(m, 0.0))
         .collect();
     let mut output = c2r.make_output_vec();
@@ -2272,7 +2981,10 @@ mod tests {
 
     #[test]
     fn ar_env_shape() {
-        let env = ArEnv { attack_secs: 0.001, release_secs: 0.001 };
+        let env = ArEnv {
+            attack_secs: 0.001,
+            release_secs: 0.001,
+        };
         let mut inst = env.instantiate(1000.0);
         let mut buf = [0.0f32; 4];
         inst.fill(&mut buf);
@@ -2285,9 +2997,9 @@ mod tests {
         let freq = 440.0f32;
         let sr = 44100.0f32;
         let n = 1024;
-        let samples: Vec<f32> = (0..n).map(|i| {
-            (2.0 * std::f32::consts::PI * freq * i as f32 / sr).sin()
-        }).collect();
+        let samples: Vec<f32> = (0..n)
+            .map(|i| (2.0 * std::f32::consts::PI * freq * i as f32 / sr).sin())
+            .collect();
         let mags = fft_magnitude(&samples);
         assert_eq!(mags.len(), n / 2 + 1);
         // Peak at 440 Hz bin

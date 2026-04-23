@@ -143,7 +143,10 @@ pub struct UnarySignal {
 
 impl Signal for UnarySignal {
     fn instantiate(&self, sr: f64) -> Box<dyn SignalInstance> {
-        Box::new(UnaryInstance { inner: self.inner.instantiate(sr), op: self.op })
+        Box::new(UnaryInstance {
+            inner: self.inner.instantiate(sr),
+            op: self.op,
+        })
     }
 }
 
@@ -156,7 +159,9 @@ impl SignalInstance for UnaryInstance {
     fn fill(&mut self, out: &mut [f32]) {
         self.inner.fill(out);
         let op = self.op;
-        for s in out.iter_mut() { *s = op(*s as f64) as f32; }
+        for s in out.iter_mut() {
+            *s = op(*s as f64) as f32;
+        }
     }
 }
 
@@ -171,8 +176,12 @@ impl Signal for ConstSignal {
     }
 }
 
-struct ConstInstance { value: f32 }
+struct ConstInstance {
+    value: f32,
+}
 
 impl SignalInstance for ConstInstance {
-    fn fill(&mut self, out: &mut [f32]) { out.fill(self.value); }
+    fn fill(&mut self, out: &mut [f32]) {
+        out.fill(self.value);
+    }
 }

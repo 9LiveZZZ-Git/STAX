@@ -8,10 +8,10 @@
 //!     input/output stub markers, pan/zoom (Alt+drag / scroll)
 //!   - Toolbar strip: promote · unbind · open in tab · text
 
-use std::collections::HashMap;
-use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use crate::{app::StaxApp, app::View, shell};
+use egui::{pos2, vec2, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use stax_graph::{Graph, NodeId, PortKind};
-use crate::{app::View, app::StaxApp, shell};
+use std::collections::HashMap;
 
 /// One level of the fn-port navigation stack:
 /// (parent_node_id, parent_subgraph, parent_positions, parent_pan, parent_zoom)
@@ -82,7 +82,9 @@ impl StaxApp {
 
         // ── Resolve selected node / fun-port ──────────────────────────────
 
-        let sel = self.fnport.selected_node
+        let sel = self
+            .fnport
+            .selected_node
             // If fnport has no selection, fall back to the graph-view selection.
             .or(self.selected_node);
 
@@ -112,7 +114,7 @@ impl StaxApp {
         let (node_label, n_inputs, n_outputs, fun_arity, adverb_str, body_ops) = {
             if let Some(node) = self.graph.node(nid) {
                 let label = node.label();
-                let n_in  = node.inputs.len();
+                let n_in = node.inputs.len();
                 let n_out = node.outputs.len();
                 let (arity, ops) = match &node.kind {
                     stax_graph::NodeKind::MakeFun { params, body } => {
@@ -121,8 +123,8 @@ impl StaxApp {
                     _ => ("?".to_owned(), None),
                 };
                 let adv = node.adverb.map(|a| match a {
-                    stax_core::Adverb::Reduce   => "/",
-                    stax_core::Adverb::Scan     => "\\",
+                    stax_core::Adverb::Reduce => "/",
+                    stax_core::Adverb::Scan => "\\",
                     stax_core::Adverb::Pairwise => "^",
                 });
                 (label, n_in, n_out, arity, adv, ops)
@@ -146,12 +148,12 @@ impl StaxApp {
 
         // ── Layout bands ──────────────────────────────────────────────────
 
-        const HDR_H:     f32 = 32.0;
-        const SIG_H:     f32 = 22.0;
+        const HDR_H: f32 = 32.0;
+        const SIG_H: f32 = 22.0;
         const TOOLBAR_H: f32 = 32.0;
 
-        let hdr_rect  = Rect::from_min_size(rect.min, vec2(rect.width(), HDR_H));
-        let sig_rect  = Rect::from_min_size(
+        let hdr_rect = Rect::from_min_size(rect.min, vec2(rect.width(), HDR_H));
+        let sig_rect = Rect::from_min_size(
             pos2(rect.min.x, rect.min.y + HDR_H),
             vec2(rect.width(), SIG_H),
         );
@@ -178,14 +180,18 @@ impl StaxApp {
 
         // "NodeLabel" in WARM
         let mut x = hdr_rect.min.x + 14.0;
-        let cy    = hdr_rect.center().y;
+        let cy = hdr_rect.center().y;
 
         let label_galley = painter.layout_no_wrap(
             node_label.clone(),
             egui::FontId::new(13.0, egui::FontFamily::Monospace),
             shell::WARM,
         );
-        painter.galley(pos2(x, cy - label_galley.size().y * 0.5), label_galley.clone(), shell::WARM);
+        painter.galley(
+            pos2(x, cy - label_galley.size().y * 0.5),
+            label_galley.clone(),
+            shell::WARM,
+        );
         x += label_galley.size().x + 2.0;
 
         // " · fn" in INK_2
@@ -195,7 +201,11 @@ impl StaxApp {
             egui::FontId::new(13.0, egui::FontFamily::Monospace),
             shell::INK_2,
         );
-        painter.galley(pos2(x, cy - suffix_galley.size().y * 0.5), suffix_galley.clone(), shell::INK_2);
+        painter.galley(
+            pos2(x, cy - suffix_galley.size().y * 0.5),
+            suffix_galley.clone(),
+            shell::INK_2,
+        );
         x += suffix_galley.size().x + 6.0;
 
         // Port index badge: small bordered rect  "out:N"
@@ -207,12 +217,14 @@ impl StaxApp {
         );
         let badge_w = badge_galley.size().x + 8.0;
         let badge_h = 14.0;
-        let badge_rect = Rect::from_min_size(
-            pos2(x, cy - badge_h * 0.5),
-            vec2(badge_w, badge_h),
-        );
+        let badge_rect = Rect::from_min_size(pos2(x, cy - badge_h * 0.5), vec2(badge_w, badge_h));
         painter.rect_filled(badge_rect, 0.0, shell::PAPER);
-        painter.rect_stroke(badge_rect, 0.0, Stroke::new(1.0, shell::PORT_FUN), StrokeKind::Outside);
+        painter.rect_stroke(
+            badge_rect,
+            0.0,
+            Stroke::new(1.0, shell::PORT_FUN),
+            StrokeKind::Outside,
+        );
         painter.galley(
             pos2(badge_rect.min.x + 4.0, cy - badge_galley.size().y * 0.5),
             badge_galley,
@@ -236,7 +248,7 @@ impl StaxApp {
         // Dotted bottom border
         let seg_w = 4.0_f32;
         let mut dx = sig_rect.min.x;
-        let dot_y  = sig_rect.max.y - 0.5;
+        let dot_y = sig_rect.max.y - 0.5;
         while dx < sig_rect.max.x {
             let end = (dx + seg_w).min(sig_rect.max.x);
             painter.line_segment(
@@ -246,9 +258,7 @@ impl StaxApp {
             dx += seg_w * 2.0;
         }
 
-        let sig_text = format!(
-            "fn arity {fun_arity}  ·  in:{n_inputs}  →  out:{n_outputs}"
-        );
+        let sig_text = format!("fn arity {fun_arity}  ·  in:{n_inputs}  →  out:{n_outputs}");
         painter.text(
             pos2(sig_rect.min.x + 14.0, sig_rect.center().y),
             egui::Align2::LEFT_CENTER,
@@ -272,14 +282,12 @@ impl StaxApp {
                 self.fnport.subgraph_zoom,
             );
 
-            let pan  = self.fnport.subgraph_pan;
+            let pan = self.fnport.subgraph_pan;
             let zoom = self.fnport.subgraph_zoom;
             let origin = canvas_rect.min;
 
             // Canvas → screen helper
-            let to_screen = |p: Pos2| -> Pos2 {
-                origin + (vec2(p.x, p.y) + pan) * zoom
-            };
+            let to_screen = |p: Pos2| -> Pos2 { origin + (vec2(p.x, p.y) + pan) * zoom };
 
             if let Some(ref sub) = self.fnport.subgraph.clone() {
                 // ── Real subgraph rendering ───────────────────────────────
@@ -288,15 +296,27 @@ impl StaxApp {
 
                 // Draw edges first (under nodes)
                 for edge in sub.edges() {
-                    if let (Some(src_node), Some(dst_node)) = (sub.node(edge.src.node), sub.node(edge.dst.node)) {
-                        let src_canvas = subpos.get(&edge.src.node).copied().unwrap_or(pos2(0.0, 0.0));
-                        let dst_canvas = subpos.get(&edge.dst.node).copied().unwrap_or(pos2(0.0, 0.0));
+                    if let (Some(src_node), Some(dst_node)) =
+                        (sub.node(edge.src.node), sub.node(edge.dst.node))
+                    {
+                        let src_canvas = subpos
+                            .get(&edge.src.node)
+                            .copied()
+                            .unwrap_or(pos2(0.0, 0.0));
+                        let dst_canvas = subpos
+                            .get(&edge.dst.node)
+                            .copied()
+                            .unwrap_or(pos2(0.0, 0.0));
                         let src_sz = crate::graph::node_size(src_node);
                         let dst_sz = crate::graph::node_size(dst_node);
-                        let from_s = to_screen(pos2(src_canvas.x + src_sz.x, src_canvas.y + src_sz.y * 0.5));
-                        let to_s   = to_screen(pos2(dst_canvas.x, dst_canvas.y + dst_sz.y * 0.5));
-                        let kind = src_node.outputs.get(edge.src.port as usize)
-                            .map(|p| &p.kind).unwrap_or(&PortKind::Real);
+                        let from_s =
+                            to_screen(pos2(src_canvas.x + src_sz.x, src_canvas.y + src_sz.y * 0.5));
+                        let to_s = to_screen(pos2(dst_canvas.x, dst_canvas.y + dst_sz.y * 0.5));
+                        let kind = src_node
+                            .outputs
+                            .get(edge.src.port as usize)
+                            .map(|p| &p.kind)
+                            .unwrap_or(&PortKind::Real);
                         crate::graph::draw_wire(&clip_painter, from_s, to_s, kind, zoom);
                     }
                 }
@@ -306,8 +326,15 @@ impl StaxApp {
                     let canvas_pos = subpos.get(&node.id).copied().unwrap_or(pos2(0.0, 0.0));
                     let screen_pos = to_screen(canvas_pos);
                     crate::graph::draw_node(
-                        &clip_painter, screen_pos, node,
-                        false, false, zoom, &[], None, None,
+                        &clip_painter,
+                        screen_pos,
+                        node,
+                        false,
+                        false,
+                        zoom,
+                        &[],
+                        None,
+                        None,
                     );
                 }
             } else {
@@ -315,11 +342,20 @@ impl StaxApp {
                 let body_canvas_w = 160.0_f32;
                 let body_canvas_h = 80.0_f32;
                 let body_tl = pos2(-body_canvas_w * 0.5, -body_canvas_h * 0.5);
-                let body_br = pos2( body_canvas_w * 0.5,  body_canvas_h * 0.5);
+                let body_br = pos2(body_canvas_w * 0.5, body_canvas_h * 0.5);
                 let body_screen = Rect::from_min_max(to_screen(body_tl), to_screen(body_br));
-                draw_dashed_rect(&clip_painter, body_screen, shell::PORT_FUN, 1.5 * zoom.sqrt(), 6.0, 4.0);
+                draw_dashed_rect(
+                    &clip_painter,
+                    body_screen,
+                    shell::PORT_FUN,
+                    1.5 * zoom.sqrt(),
+                    6.0,
+                    4.0,
+                );
                 clip_painter.text(
-                    body_screen.center(), egui::Align2::CENTER_CENTER, "λ body",
+                    body_screen.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "λ body",
                     egui::FontId::new(12.0 * zoom.sqrt().max(0.6), egui::FontFamily::Monospace),
                     shell::INK_3,
                 );
@@ -327,7 +363,12 @@ impl StaxApp {
         }
 
         // Canvas border
-        painter.rect_stroke(canvas_rect, 0.0, Stroke::new(1.0, shell::RULE), StrokeKind::Outside);
+        painter.rect_stroke(
+            canvas_rect,
+            0.0,
+            Stroke::new(1.0, shell::RULE),
+            StrokeKind::Outside,
+        );
 
         // ── Subgraph interaction (pan/zoom + double-click drill-in) ─────────
 
@@ -340,8 +381,7 @@ impl StaxApp {
                 let new_z = (old_z * (1.0 + scroll * 0.0015)).clamp(0.15, 5.0);
                 if let Some(cursor) = ui.input(|i| i.pointer.hover_pos()) {
                     let origin = canvas_rect.min;
-                    self.fnport.subgraph_pan +=
-                        (cursor - origin) * (1.0 / new_z - 1.0 / old_z);
+                    self.fnport.subgraph_pan += (cursor - origin) * (1.0 / new_z - 1.0 / old_z);
                 }
                 self.fnport.subgraph_zoom = new_z;
             }
@@ -351,8 +391,7 @@ impl StaxApp {
         if canvas_resp.dragged_by(egui::PointerButton::Middle)
             || (alt && canvas_resp.dragged_by(egui::PointerButton::Primary))
         {
-            self.fnport.subgraph_pan +=
-                canvas_resp.drag_delta() / self.fnport.subgraph_zoom;
+            self.fnport.subgraph_pan += canvas_resp.drag_delta() / self.fnport.subgraph_zoom;
         }
 
         // Double-click on a MakeFun node in the subgraph drills in.
@@ -360,31 +399,32 @@ impl StaxApp {
         if dbl {
             if let Some(click_pos) = ui.input(|i| i.pointer.interact_pos()) {
                 // Find which subgraph node was double-clicked.
-                let pan  = self.fnport.subgraph_pan;
+                let pan = self.fnport.subgraph_pan;
                 let zoom = self.fnport.subgraph_zoom;
                 let origin = canvas_rect.min;
                 let to_screen = |p: Pos2| -> Pos2 { origin + (vec2(p.x, p.y) + pan) * zoom };
 
-                let hit_sub_nid: Option<NodeId> = if let Some(ref sub) = self.fnport.subgraph.clone() {
-                    sub.nodes_in_order().find_map(|sn| {
-                        let spos = self.fnport.subgraph_positions.get(&sn.id).copied()?;
-                        let ss = to_screen(spos);
-                        let sz = crate::graph::node_size(sn) * zoom;
-                        let nr = Rect::from_min_size(ss, sz);
-                        if nr.contains(click_pos) {
-                            // Only drill into MakeFun nodes
-                            if matches!(sn.kind, stax_graph::NodeKind::MakeFun { .. }) {
-                                Some(sn.id)
+                let hit_sub_nid: Option<NodeId> =
+                    if let Some(ref sub) = self.fnport.subgraph.clone() {
+                        sub.nodes_in_order().find_map(|sn| {
+                            let spos = self.fnport.subgraph_positions.get(&sn.id).copied()?;
+                            let ss = to_screen(spos);
+                            let sz = crate::graph::node_size(sn) * zoom;
+                            let nr = Rect::from_min_size(ss, sz);
+                            if nr.contains(click_pos) {
+                                // Only drill into MakeFun nodes
+                                if matches!(sn.kind, stax_graph::NodeKind::MakeFun { .. }) {
+                                    Some(sn.id)
+                                } else {
+                                    None
+                                }
                             } else {
                                 None
                             }
-                        } else {
-                            None
-                        }
-                    })
-                } else {
-                    None
-                };
+                        })
+                    } else {
+                        None
+                    };
 
                 if let Some(child_nid) = hit_sub_nid {
                     if let Some(ref sub) = self.fnport.subgraph.clone() {
@@ -402,11 +442,11 @@ impl StaxApp {
                                 // Build new subgraph from child's body
                                 let new_sub = stax_graph::lift(&body_ops);
                                 let new_pos = crate::graph::auto_layout(&new_sub);
-                                self.fnport.subgraph           = Some(new_sub);
+                                self.fnport.subgraph = Some(new_sub);
                                 self.fnport.subgraph_positions = new_pos;
-                                self.fnport.subgraph_for       = Some(child_nid);
-                                self.fnport.subgraph_pan       = Vec2::ZERO;
-                                self.fnport.subgraph_zoom      = 1.0;
+                                self.fnport.subgraph_for = Some(child_nid);
+                                self.fnport.subgraph_pan = Vec2::ZERO;
+                                self.fnport.subgraph_zoom = 1.0;
                             }
                         }
                     }
@@ -425,15 +465,17 @@ impl StaxApp {
         // Build button list dynamically (add "← back" when nav_stack non-empty)
         let has_back = !self.fnport.nav_stack.is_empty();
         let mut buttons_vec: Vec<&str> = Vec::new();
-        if has_back { buttons_vec.push("← back"); }
+        if has_back {
+            buttons_vec.push("← back");
+        }
         buttons_vec.extend_from_slice(&["promote", "unbind", "open in tab", "text"]);
         let buttons = buttons_vec.as_slice();
 
-        let btn_h   = 18.0_f32;
+        let btn_h = 18.0_f32;
         let btn_pad = 10.0_f32;
         let btn_gap = 6.0_f32;
-        let mut bx  = toolbar_rect.min.x + 14.0;
-        let btn_cy  = toolbar_rect.center().y;
+        let mut bx = toolbar_rect.min.x + 14.0;
+        let btn_cy = toolbar_rect.center().y;
 
         let font = egui::FontId::new(11.0, egui::FontFamily::Monospace);
         let mut btn_rects: Vec<Rect> = Vec::with_capacity(buttons.len());
@@ -453,15 +495,37 @@ impl StaxApp {
         for (i, (label, brect)) in buttons.iter().zip(btn_rects.iter()).enumerate() {
             let hovered = ptr_pos.is_some_and(|p| brect.contains(p));
             let is_back = has_back && i == 0;
-            let bg   = if hovered { shell::PAPER_2 } else { shell::PAPER };
-            let fg   = if is_back  { shell::WARM }
-                       else if hovered { shell::INK } else { shell::INK_2 };
-            let bord = if is_back  { shell::WARM }
-                       else if hovered { shell::INK_2 } else { shell::RULE };
+            let bg = if hovered {
+                shell::PAPER_2
+            } else {
+                shell::PAPER
+            };
+            let fg = if is_back {
+                shell::WARM
+            } else if hovered {
+                shell::INK
+            } else {
+                shell::INK_2
+            };
+            let bord = if is_back {
+                shell::WARM
+            } else if hovered {
+                shell::INK_2
+            } else {
+                shell::RULE
+            };
             painter.rect_filled(*brect, 0.0, bg);
             painter.rect_stroke(*brect, 0.0, Stroke::new(1.0, bord), StrokeKind::Outside);
-            painter.text(brect.center(), egui::Align2::CENTER_CENTER, *label, font.clone(), fg);
-            if hovered && clicked { btn_clicked = Some(i); }
+            painter.text(
+                brect.center(),
+                egui::Align2::CENTER_CENTER,
+                *label,
+                font.clone(),
+                fg,
+            );
+            if hovered && clicked {
+                btn_clicked = Some(i);
+            }
         }
 
         if let Some(idx) = btn_clicked {
@@ -472,11 +536,11 @@ impl StaxApp {
                     if let Some((parent_nid, parent_sub, parent_pos, parent_pan, parent_zoom)) =
                         self.fnport.nav_stack.pop()
                     {
-                        self.fnport.subgraph           = parent_sub;
+                        self.fnport.subgraph = parent_sub;
                         self.fnport.subgraph_positions = parent_pos;
-                        self.fnport.subgraph_for       = Some(parent_nid);
-                        self.fnport.subgraph_pan       = parent_pan;
-                        self.fnport.subgraph_zoom      = parent_zoom;
+                        self.fnport.subgraph_for = Some(parent_nid);
+                        self.fnport.subgraph_pan = parent_pan;
+                        self.fnport.subgraph_zoom = parent_zoom;
                     }
                 }
                 // "open in tab" = index 3 when no back, 4 when back
@@ -511,9 +575,9 @@ fn draw_dashed_rect(
     // Walk all four edges and emit dash segments.
     let stroke = Stroke::new(width, color);
     let edges: [(Pos2, Pos2); 4] = [
-        (rect.left_top(),    rect.right_top()),
-        (rect.right_top(),   rect.right_bottom()),
-        (rect.right_bottom(),rect.left_bottom()),
+        (rect.left_top(), rect.right_top()),
+        (rect.right_top(), rect.right_bottom()),
+        (rect.right_bottom(), rect.left_bottom()),
         (rect.left_bottom(), rect.left_top()),
     ];
     for (a, b) in edges {
@@ -531,7 +595,9 @@ fn draw_dashed_line(
     gap: f32,
 ) {
     let total = (b - a).length();
-    if total < 0.5 { return; }
+    if total < 0.5 {
+        return;
+    }
     let dir = (b - a) / total;
     let period = dash + gap;
     let mut t = 0.0_f32;

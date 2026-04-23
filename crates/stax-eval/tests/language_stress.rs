@@ -10,7 +10,6 @@
 /// 7. Form operations
 /// 8. Ref operations
 /// 9. Type checks / `type` word
-
 use stax_core::Value;
 use stax_eval::interp::Interp;
 use stax_parser::parse;
@@ -62,28 +61,41 @@ fn collect_stream(v: &Value) -> Vec<f64> {
 fn arith_division_by_zero_produces_inf() {
     // IEEE 754: 1.0 / 0.0 = +inf, not an error
     let s = eval("1 0 /");
-    assert!(real(&s, 0).is_infinite() && real(&s, 0) > 0.0,
-        "1/0 should be +inf, got {}", real(&s, 0));
+    assert!(
+        real(&s, 0).is_infinite() && real(&s, 0) > 0.0,
+        "1/0 should be +inf, got {}",
+        real(&s, 0)
+    );
 }
 
 #[test]
 fn arith_negative_division_by_zero_produces_neg_inf() {
     let s = eval("-1 0 /");
-    assert!(real(&s, 0).is_infinite() && real(&s, 0) < 0.0,
-        "-1/0 should be -inf, got {}", real(&s, 0));
+    assert!(
+        real(&s, 0).is_infinite() && real(&s, 0) < 0.0,
+        "-1/0 should be -inf, got {}",
+        real(&s, 0)
+    );
 }
 
 #[test]
 fn arith_zero_divided_by_zero_is_nan() {
     let s = eval("0 0 /");
-    assert!(real(&s, 0).is_nan(), "0/0 should be NaN, got {}", real(&s, 0));
+    assert!(
+        real(&s, 0).is_nan(),
+        "0/0 should be NaN, got {}",
+        real(&s, 0)
+    );
 }
 
 #[test]
 fn arith_very_large_numbers() {
     // 1e300 * 1e300 = inf (overflow)
     let s = eval("1e300 1e300 *");
-    assert!(real(&s, 0).is_infinite(), "1e300 * 1e300 should overflow to inf");
+    assert!(
+        real(&s, 0).is_infinite(),
+        "1e300 * 1e300 should overflow to inf"
+    );
 }
 
 #[test]
@@ -159,7 +171,10 @@ fn arith_sqrt_negative_is_nan() {
 #[test]
 fn arith_ln_zero_is_neg_inf() {
     let s = eval("0 ln");
-    assert!(real(&s, 0).is_infinite() && real(&s, 0) < 0.0, "ln(0) should be -inf");
+    assert!(
+        real(&s, 0).is_infinite() && real(&s, 0) < 0.0,
+        "ln(0) should be -inf"
+    );
 }
 
 #[test]
@@ -605,7 +620,11 @@ fn form_keys_are_symbols() {
     if let Value::Stream(s) = &interp.stack[0] {
         let mut it = s.iter();
         if let Some(v) = it.next() {
-            assert!(matches!(v, Value::Sym(_)), "form keys should be Sym, got {:?}", v);
+            assert!(
+                matches!(v, Value::Sym(_)),
+                "form keys should be Sym, got {:?}",
+                v
+            );
         }
     }
 }
@@ -622,7 +641,10 @@ fn nested_form_parent_lookup() {
 #[test]
 fn form_parent_of_no_parent_is_nil() {
     let s = eval("{:x 1} parent");
-    assert!(matches!(s[0], Value::Nil), "parent of root form should be Nil");
+    assert!(
+        matches!(s[0], Value::Nil),
+        "parent of root form should be Nil"
+    );
 }
 
 // ============================================================================
@@ -883,17 +905,33 @@ fn inc_dec() {
 #[test]
 fn comparison_operators() {
     // These work correctly:
-    assert_eq!(real(&eval("3 5 <"), 0), 1.0,  "3 < 5 should be 1");
-    assert_eq!(real(&eval("5 3 <"), 0), 0.0,  "5 < 3 should be 0");
-    assert_eq!(real(&eval("5 3 >"), 0), 1.0,  "5 > 3 should be 1");
-    assert_eq!(real(&eval("3 5 >"), 0), 0.0,  "3 > 5 should be 0");
+    assert_eq!(real(&eval("3 5 <"), 0), 1.0, "3 < 5 should be 1");
+    assert_eq!(real(&eval("5 3 <"), 0), 0.0, "5 < 3 should be 0");
+    assert_eq!(real(&eval("5 3 >"), 0), 1.0, "5 > 3 should be 1");
+    assert_eq!(real(&eval("3 5 >"), 0), 0.0, "3 > 5 should be 0");
 
     // Fixed: parser now correctly tokenises `<=` and `>=` as single words.
-    assert_eq!(real(&eval("3 3 <="), 0), 1.0, "3 <= 3 should be 1 (equal case)");
-    assert_eq!(real(&eval("2 3 <="), 0), 1.0, "2 <= 3 should be 1 (less case)");
+    assert_eq!(
+        real(&eval("3 3 <="), 0),
+        1.0,
+        "3 <= 3 should be 1 (equal case)"
+    );
+    assert_eq!(
+        real(&eval("2 3 <="), 0),
+        1.0,
+        "2 <= 3 should be 1 (less case)"
+    );
     assert_eq!(real(&eval("4 3 <="), 0), 0.0, "4 <= 3 should be 0");
-    assert_eq!(real(&eval("3 3 >="), 0), 1.0, "3 >= 3 should be 1 (equal case)");
-    assert_eq!(real(&eval("4 3 >="), 0), 1.0, "4 >= 3 should be 1 (greater case)");
+    assert_eq!(
+        real(&eval("3 3 >="), 0),
+        1.0,
+        "3 >= 3 should be 1 (equal case)"
+    );
+    assert_eq!(
+        real(&eval("4 3 >="), 0),
+        1.0,
+        "4 >= 3 should be 1 (greater case)"
+    );
     assert_eq!(real(&eval("2 3 >="), 0), 0.0, "2 >= 3 should be 0");
 }
 

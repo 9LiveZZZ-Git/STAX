@@ -23,8 +23,12 @@ fn main() -> anyhow::Result<()> {
             break;
         }
         let line = line.trim();
-        if line.is_empty() { continue; }
-        if line == "quit" || line == ":q" { break; }
+        if line.is_empty() {
+            continue;
+        }
+        if line == "quit" || line == ":q" {
+            break;
+        }
         if line == ".s" {
             for (i, v) in interp.stack.iter().enumerate() {
                 println!("  [{i}] {v:?}");

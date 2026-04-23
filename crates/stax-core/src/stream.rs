@@ -60,15 +60,27 @@ where
     F: Fn() -> Box<dyn StreamIter> + Send + Sync + 'static,
 {
     pub fn new(factory: F) -> Self {
-        Self { factory, len: None, infinite: false }
+        Self {
+            factory,
+            len: None,
+            infinite: false,
+        }
     }
 
     pub fn finite(factory: F, len: usize) -> Self {
-        Self { factory, len: Some(len), infinite: false }
+        Self {
+            factory,
+            len: Some(len),
+            infinite: false,
+        }
     }
 
     pub fn infinite(factory: F) -> Self {
-        Self { factory, len: None, infinite: true }
+        Self {
+            factory,
+            len: None,
+            infinite: true,
+        }
     }
 }
 
@@ -94,7 +106,10 @@ pub struct VecStream(pub Vec<Value>);
 
 impl Stream for VecStream {
     fn iter(&self) -> Box<dyn StreamIter> {
-        Box::new(VecStreamIter { items: self.0.clone(), pos: 0 })
+        Box::new(VecStreamIter {
+            items: self.0.clone(),
+            pos: 0,
+        })
     }
 
     fn len_hint(&self) -> Option<usize> {

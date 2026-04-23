@@ -1,39 +1,39 @@
-use egui::Color32;
 use crate::shell;
+use egui::Color32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TK {
     Comment,
     Number,
-    Operator,  // +  -  *  /  @  etc.  → port-signal
-    Bracket,   // [ ]                  → ink-2
-    Lambda,    // \  =  =>             → port-fun 500
-    Str,       // "…"                  → port-stream
-    Symbol,    // .name  ,name  'name  → port-fun
-    Builtin,   // known words          → ink 500
-    Word,      // user words           → ink 400
+    Operator, // +  -  *  /  @  etc.  → port-signal
+    Bracket,  // [ ]                  → ink-2
+    Lambda,   // \  =  =>             → port-fun 500
+    Str,      // "…"                  → port-stream
+    Symbol,   // .name  ,name  'name  → port-fun
+    Builtin,  // known words          → ink 500
+    Word,     // user words           → ink 400
     Space,
 }
 
 pub struct Span {
     pub start: usize,
-    pub end:   usize,
-    pub kind:  TK,
+    pub end: usize,
+    pub kind: TK,
 }
 
 impl Span {
     pub fn color(&self) -> Color32 {
         match self.kind {
-            TK::Comment  => shell::INK_3,
-            TK::Number   => shell::INK,
+            TK::Comment => shell::INK_3,
+            TK::Number => shell::INK,
             TK::Operator => shell::PORT_SIGNAL,
-            TK::Bracket  => shell::INK_2,
-            TK::Lambda   => shell::PORT_FUN,
-            TK::Str      => shell::PORT_STREAM,
-            TK::Symbol   => shell::PORT_FUN,
-            TK::Builtin  => shell::INK,
-            TK::Word     => shell::INK,
-            TK::Space    => shell::PAPER,
+            TK::Bracket => shell::INK_2,
+            TK::Lambda => shell::PORT_FUN,
+            TK::Str => shell::PORT_STREAM,
+            TK::Symbol => shell::PORT_FUN,
+            TK::Builtin => shell::INK,
+            TK::Word => shell::INK,
+            TK::Space => shell::PAPER,
         }
     }
 
@@ -45,56 +45,230 @@ impl Span {
 // All M0–M3 built-in words (used to distinguish from user names)
 static BUILTINS: &[&str] = &[
     // oscillators
-    "sinosc","saw","lfsaw","tri","square","pulse","impulse",
+    "sinosc",
+    "saw",
+    "lfsaw",
+    "tri",
+    "square",
+    "pulse",
+    "impulse",
     // noise
-    "wnoise","white","pnoise","pink","brown","lfnoise0","lfnoise1","dust","dust2","sah",
+    "wnoise",
+    "white",
+    "pnoise",
+    "pink",
+    "brown",
+    "lfnoise0",
+    "lfnoise1",
+    "dust",
+    "dust2",
+    "sah",
     // filters
-    "lpf1","lpf","lpf2","hpf1","hpf","hpf2","rlpf","rhpf","lag","lag2","leakdc",
-    "svflp","svfhp","svfbp","svfnotch","firlp","firhp","firbp","hilbert",
-    "disperser","thiran","farrow",
+    "lpf1",
+    "lpf",
+    "lpf2",
+    "hpf1",
+    "hpf",
+    "hpf2",
+    "rlpf",
+    "rhpf",
+    "lag",
+    "lag2",
+    "leakdc",
+    "svflp",
+    "svfhp",
+    "svfbp",
+    "svfnotch",
+    "firlp",
+    "firhp",
+    "firbp",
+    "hilbert",
+    "disperser",
+    "thiran",
+    "farrow",
     // envelopes
-    "ar","adsr","fadein","fadeout","hanenv","decay","decay2","line","xline",
+    "ar",
+    "adsr",
+    "fadein",
+    "fadeout",
+    "hanenv",
+    "decay",
+    "decay2",
+    "line",
+    "xline",
     // dynamics / delay
-    "combn","delayn","verb","compressor","limiter",
+    "combn",
+    "delayn",
+    "verb",
+    "compressor",
+    "limiter",
     // waveshaping
-    "tanhsat","softclip","hardclip","cubicsat","atansat","chebdist",
+    "tanhsat",
+    "softclip",
+    "hardclip",
+    "cubicsat",
+    "atansat",
+    "chebdist",
     // spatial
-    "pan2","bal2","rot2","pan3",
+    "pan2",
+    "bal2",
+    "rot2",
+    "pan3",
     // synthesis
-    "pluck","grain","pvocstretch","pvocp",
+    "pluck",
+    "grain",
+    "pvocstretch",
+    "pvocp",
     // windows
-    "hann","hamming","blackman","blackmanharris","nuttall","flattop","gaussian","kaiser",
+    "hann",
+    "hamming",
+    "blackman",
+    "blackmanharris",
+    "nuttall",
+    "flattop",
+    "gaussian",
+    "kaiser",
     // analysis
-    "goertzel","goertzelc","cqt","mdct","imdct","lpcanalz","lpcsynth","fft","ifft",
-    "normalize","peak","rms","dur",
+    "goertzel",
+    "goertzelc",
+    "cqt",
+    "mdct",
+    "imdct",
+    "lpcanalz",
+    "lpcsynth",
+    "fft",
+    "ifft",
+    "normalize",
+    "peak",
+    "rms",
+    "dur",
     // attractors
-    "lorenz","rossler","duffing","vanderpol","logistic","henon",
+    "lorenz",
+    "rossler",
+    "duffing",
+    "vanderpol",
+    "logistic",
+    "henon",
     // i/o
-    "play","stop","record","p","trace","inspect","bench",
+    "play",
+    "stop",
+    "record",
+    "p",
+    "trace",
+    "inspect",
+    "bench",
     // stack
-    "dup","drop","swap","over","rot","nip","tuck",
+    "dup",
+    "drop",
+    "swap",
+    "over",
+    "rot",
+    "nip",
+    "tuck",
     // control
-    "if","ifelse","while","loop","do","times",
+    "if",
+    "ifelse",
+    "while",
+    "loop",
+    "do",
+    "times",
     // math
-    "sqrt","abs","neg","sign","sin","cos","tan","ln","log","exp",
-    "floor","ceil","round","min","max","clip","wrap","fold","hypot","sinc",
+    "sqrt",
+    "abs",
+    "neg",
+    "sign",
+    "sin",
+    "cos",
+    "tan",
+    "ln",
+    "log",
+    "exp",
+    "floor",
+    "ceil",
+    "round",
+    "min",
+    "max",
+    "clip",
+    "wrap",
+    "fold",
+    "hypot",
+    "sinc",
     // streams
-    "nat","ord","ordz","cyc","by","nby","to","take","N","Z",
-    "keep","skip","filter","keepWhile","skipWhile",
-    "size","reverse","sort","grade","flatten","mirror","shift","lace","2X",
-    "grow","ngrow","lindiv","expdiv","ever",
+    "nat",
+    "ord",
+    "ordz",
+    "cyc",
+    "by",
+    "nby",
+    "to",
+    "take",
+    "N",
+    "Z",
+    "keep",
+    "skip",
+    "filter",
+    "keepWhile",
+    "skipWhile",
+    "size",
+    "reverse",
+    "sort",
+    "grade",
+    "flatten",
+    "mirror",
+    "shift",
+    "lace",
+    "2X",
+    "grow",
+    "ngrow",
+    "lindiv",
+    "expdiv",
+    "ever",
     // forms
-    "has","keys","values","kv","local","dot","parent","ref","deref",
+    "has",
+    "keys",
+    "values",
+    "kv",
+    "local",
+    "dot",
+    "parent",
+    "ref",
+    "deref",
     // conversion
-    "midihz","midinote","bilin","biexp","linlin","linexp","explin","dbtamp","amptodb",
+    "midihz",
+    "midinote",
+    "bilin",
+    "biexp",
+    "linlin",
+    "linexp",
+    "explin",
+    "dbtamp",
+    "amptodb",
     // sample-rate
-    "sr","nyq","isr","inyq","rps",
+    "sr",
+    "nyq",
+    "isr",
+    "inyq",
+    "rps",
     // random
-    "rand","irand","rands","irands","picks","coins","seed","muss",
+    "rand",
+    "irand",
+    "rands",
+    "irands",
+    "picks",
+    "coins",
+    "seed",
+    "muss",
     // Z-list
-    "natz","byz","nbyz","invz","negz","evenz","oddz",
+    "natz",
+    "byz",
+    "nbyz",
+    "invz",
+    "negz",
+    "evenz",
+    "oddz",
     // misc
-    "upSmp","dwnSmp",
+    "upSmp",
+    "dwnSmp",
 ];
 
 /// Expose the full builtins list for completion and doc lookup.
@@ -107,7 +281,10 @@ fn is_word_char(c: char) -> bool {
 }
 
 fn is_op_char(c: char) -> bool {
-    matches!(c, '+' | '-' | '*' | '/' | '!' | '%' | '@' | '&' | '|' | '^' | '~' | '#')
+    matches!(
+        c,
+        '+' | '-' | '*' | '/' | '!' | '%' | '@' | '&' | '|' | '^' | '~' | '#'
+    )
 }
 
 pub fn highlight(src: &str) -> Vec<Span> {
@@ -118,7 +295,11 @@ pub fn highlight(src: &str) -> Vec<Span> {
 
     macro_rules! push {
         ($s:expr, $e:expr, $k:expr) => {
-            spans.push(Span { start: $s, end: $e, kind: $k })
+            spans.push(Span {
+                start: $s,
+                end: $e,
+                kind: $k,
+            })
         };
     }
 
@@ -128,7 +309,9 @@ pub fn highlight(src: &str) -> Vec<Span> {
         // Line comment  //
         if c == '/' && i + 1 < len && b[i + 1] == b'/' {
             let s = i;
-            while i < len && b[i] != b'\n' { i += 1; }
+            while i < len && b[i] != b'\n' {
+                i += 1;
+            }
             push!(s, i, TK::Comment);
             continue;
         }
@@ -136,7 +319,9 @@ pub fn highlight(src: &str) -> Vec<Span> {
         // Whitespace
         if c.is_ascii_whitespace() {
             let s = i;
-            while i < len && (b[i] as char).is_ascii_whitespace() { i += 1; }
+            while i < len && (b[i] as char).is_ascii_whitespace() {
+                i += 1;
+            }
             push!(s, i, TK::Space);
             continue;
         }
@@ -146,10 +331,14 @@ pub fn highlight(src: &str) -> Vec<Span> {
             let s = i;
             i += 1;
             while i < len && b[i] != b'"' {
-                if b[i] == b'\\' { i += 1; }
+                if b[i] == b'\\' {
+                    i += 1;
+                }
                 i += 1;
             }
-            if i < len { i += 1; }
+            if i < len {
+                i += 1;
+            }
             push!(s, i, TK::Str);
             continue;
         }
@@ -201,7 +390,9 @@ pub fn highlight(src: &str) -> Vec<Span> {
         if (c == '.' || c == ',') && i + 1 < len && (b[i + 1] as char).is_alphabetic() {
             let s = i;
             i += 1;
-            while i < len && is_word_char(b[i] as char) { i += 1; }
+            while i < len && is_word_char(b[i] as char) {
+                i += 1;
+            }
             push!(s, i, TK::Symbol);
             continue;
         }
@@ -209,10 +400,14 @@ pub fn highlight(src: &str) -> Vec<Span> {
         // Number (digits, optional leading -, decimal point)
         if c.is_ascii_digit() {
             let s = i;
-            while i < len && (b[i] as char).is_ascii_digit() { i += 1; }
+            while i < len && (b[i] as char).is_ascii_digit() {
+                i += 1;
+            }
             if i < len && b[i] == b'.' && i + 1 < len && (b[i + 1] as char).is_ascii_digit() {
                 i += 1;
-                while i < len && (b[i] as char).is_ascii_digit() { i += 1; }
+                while i < len && (b[i] as char).is_ascii_digit() {
+                    i += 1;
+                }
             }
             push!(s, i, TK::Number);
             continue;
@@ -221,7 +416,9 @@ pub fn highlight(src: &str) -> Vec<Span> {
         // Operator characters
         if is_op_char(c) {
             let s = i;
-            while i < len && is_op_char(b[i] as char) { i += 1; }
+            while i < len && is_op_char(b[i] as char) {
+                i += 1;
+            }
             push!(s, i, TK::Operator);
             continue;
         }
@@ -231,7 +428,9 @@ pub fn highlight(src: &str) -> Vec<Span> {
             let s = i;
             let is_sym = c == '\'';
             i += 1;
-            while i < len && is_word_char(b[i] as char) { i += 1; }
+            while i < len && is_word_char(b[i] as char) {
+                i += 1;
+            }
             let word = &src[s..i];
             let kind = if is_sym {
                 TK::Symbol
@@ -265,7 +464,9 @@ pub fn layout_job_sized(src: &str, font_size: f32) -> egui::text::LayoutJob {
 
     for span in &spans {
         let text = &src[span.start..span.end];
-        if text.is_empty() { continue; }
+        if text.is_empty() {
+            continue;
+        }
         job.append(
             text,
             0.0,

@@ -276,11 +276,11 @@ fn list_nested_with_values() {
     // = 9 ops total
     let o = ops("[1 [2 [3]]]");
     assert_eq!(o.len(), 9);
-    assert!(matches!(o[0], Op::ListMark));        // outer [
+    assert!(matches!(o[0], Op::ListMark)); // outer [
     assert!((real_val(&o[1]) - 1.0).abs() < 1e-12);
-    assert!(matches!(o[2], Op::ListMark));        // middle [
+    assert!(matches!(o[2], Op::ListMark)); // middle [
     assert!((real_val(&o[3]) - 2.0).abs() < 1e-12);
-    assert!(matches!(o[4], Op::ListMark));        // inner [
+    assert!(matches!(o[4], Op::ListMark)); // inner [
     assert!((real_val(&o[5]) - 3.0).abs() < 1e-12);
     assert!(matches!(o[6], Op::MakeList { signal: false })); // closes [3]
     assert!(matches!(o[7], Op::MakeList { signal: false })); // closes [2 [3]]
@@ -313,7 +313,9 @@ fn lambda_three_params() {
     // \a b c [a b c + +]
     let o = ops("\\a b c [a b c + +]");
     assert_eq!(o.len(), 1);
-    let Op::MakeFun { params, body } = &o[0] else { panic!("expected MakeFun") };
+    let Op::MakeFun { params, body } = &o[0] else {
+        panic!("expected MakeFun")
+    };
     assert_eq!(params.len(), 3);
     assert_eq!(params[0].as_ref(), "a");
     assert_eq!(params[1].as_ref(), "b");

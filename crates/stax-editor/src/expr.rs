@@ -33,19 +33,35 @@ pub fn ops_to_source(ops: &[Op]) -> String {
                             out.push_str(&format!("{x}"));
                         }
                     }
-                    Value::Str(s)  => { out.push('"'); out.push_str(s); out.push('"'); }
-                    Value::Sym(s)  => { out.push('\''); out.push_str(s); }
-                    Value::Nil     => out.push_str("nil"),
-                    _              => out.push_str("<val>"),
+                    Value::Str(s) => {
+                        out.push('"');
+                        out.push_str(s);
+                        out.push('"');
+                    }
+                    Value::Sym(s) => {
+                        out.push('\'');
+                        out.push_str(s);
+                    }
+                    Value::Nil => out.push_str("nil"),
+                    _ => out.push_str("<val>"),
                 }
             }
-            Op::Word(w)          => out.push_str(w),
-            Op::Bind(name)       => { out.push_str("= "); out.push_str(name); }
-            Op::Quote(name)      => { out.push('`'); out.push_str(name); }
-            Op::Sym(name)        => { out.push('\''); out.push_str(name); }
-            Op::Call             => out.push('!'),
-            Op::MakeList { .. }  => out.push_str("[…]"),
-            Op::MakeForm { .. }  => out.push_str("{…}"),
+            Op::Word(w) => out.push_str(w),
+            Op::Bind(name) => {
+                out.push_str("= ");
+                out.push_str(name);
+            }
+            Op::Quote(name) => {
+                out.push('`');
+                out.push_str(name);
+            }
+            Op::Sym(name) => {
+                out.push('\'');
+                out.push_str(name);
+            }
+            Op::Call => out.push('!'),
+            Op::MakeList { .. } => out.push_str("[…]"),
+            Op::MakeForm { .. } => out.push_str("{…}"),
             Op::MakeFun { params, .. } => {
                 out.push('\\');
                 let p: Vec<&str> = params.iter().map(|s| s.as_ref()).collect();
@@ -55,12 +71,14 @@ pub fn ops_to_source(ops: &[Op]) -> String {
             Op::Adverb(adv) => {
                 use stax_core::op::Adverb;
                 let s = match adv {
-                    Adverb::Reduce   => "/",
-                    Adverb::Scan     => "\\",
+                    Adverb::Reduce => "/",
+                    Adverb::Scan => "\\",
                     Adverb::Pairwise => "^",
                 };
                 // Adverb attaches to the next word; strip the trailing space
-                if out.ends_with(' ') { out.pop(); }
+                if out.ends_with(' ') {
+                    out.pop();
+                }
                 out.push_str(s);
             }
             _ => out.push_str("<op>"),

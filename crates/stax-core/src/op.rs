@@ -35,7 +35,10 @@ pub enum Op {
 
     /// `= (a b c)` or `= [a b c]` — multi-bind. `list_mode` true for `[...]`
     /// destructuring a list, false for `(...)` popping N stack values.
-    BindMany { names: Arc<[Arc<str>]>, list_mode: bool },
+    BindMany {
+        names: Arc<[Arc<str>]>,
+        list_mode: bool,
+    },
 
     /// `!` — apply the function on top of the stack.
     Call,
@@ -45,18 +48,29 @@ pub enum Op {
     /// how many values the bracketed expression leaves on the stack; the
     /// compiler emits a `ListMark` + `MakeList` pair around the body.
     ListMark,
-    MakeList { signal: bool },
+    MakeList {
+        signal: bool,
+    },
 
     /// Build a Form. Keys in `keys`, values taken from stack.
-    MakeForm { keys: Arc<[Arc<str>]>, parent: bool },
+    MakeForm {
+        keys: Arc<[Arc<str>]>,
+        parent: bool,
+    },
 
     /// Build a Function closing over the current environment.
-    MakeFun { params: Arc<[Arc<str>]>, body: Arc<[Op]> },
+    MakeFun {
+        params: Arc<[Arc<str>]>,
+        body: Arc<[Op]>,
+    },
 
     /// Rank-lift annotation on the next value consumption.
     /// `depth` 1 for `@`, 2 for `@@`, etc. `order` is the `@1`/`@2` tag for
     /// outer products (0 means unordered).
-    Each { depth: u8, order: u8 },
+    Each {
+        depth: u8,
+        order: u8,
+    },
 
     /// Adverb applied to the next binary operator.
     /// - `Reduce` — `+/` folds across a list

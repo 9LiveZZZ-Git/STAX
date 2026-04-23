@@ -2,7 +2,7 @@
 // Each test runs parse() → Interp::exec() and inspects the resulting stack.
 
 use stax_core::Value;
-use stax_eval::interp::{Interp, collect_to_vec};
+use stax_eval::interp::{collect_to_vec, Interp};
 use stax_parser::parse;
 
 // ---- helpers ---------------------------------------------------------------
@@ -10,7 +10,9 @@ use stax_parser::parse;
 fn run(src: &str) -> Interp {
     let ops = parse(src).unwrap_or_else(|e| panic!("parse failed for {src:?}: {e:?}"));
     let mut interp = Interp::new();
-    interp.exec(&ops).unwrap_or_else(|e| panic!("exec failed for {src:?}: {e:?}"));
+    interp
+        .exec(&ops)
+        .unwrap_or_else(|e| panic!("exec failed for {src:?}: {e:?}"));
     interp
 }
 
@@ -23,7 +25,8 @@ fn run_err(src: &str) -> stax_core::Error {
 fn top_real(src: &str) -> f64 {
     let mut interp = run(src);
     let v = interp.stack.pop().expect("empty stack");
-    v.as_real().unwrap_or_else(|| panic!("top is not Real: {v:?}"))
+    v.as_real()
+        .unwrap_or_else(|| panic!("top is not Real: {v:?}"))
 }
 
 fn top_list(src: &str) -> Vec<f64> {
@@ -270,7 +273,10 @@ fn stack_over() {
 fn fib_stream_first_10() {
     // fib starts at 0: [0 1 1 2 3 5 8 13 21 34 ...]
     let items = top_list("fib 10 N");
-    assert_eq!(items, vec![0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0]);
+    assert_eq!(
+        items,
+        vec![0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0]
+    );
 }
 
 // ===========================================================================
@@ -513,7 +519,11 @@ fn demo_patch_parses_and_evals() {
         play
     ";
     let i = run(src);
-    assert!(i.stack.len() <= 1, "unexpected stack depth: {}", i.stack.len());
+    assert!(
+        i.stack.len() <= 1,
+        "unexpected stack depth: {}",
+        i.stack.len()
+    );
 }
 
 #[test]

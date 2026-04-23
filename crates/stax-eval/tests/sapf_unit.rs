@@ -34,8 +34,8 @@ fn sapf_unit_tests() {
             .join("unit-tests.txt")
     };
 
-    let raw = std::fs::read_to_string(&abs)
-        .unwrap_or_else(|e| panic!("Cannot read {:?}: {e}", abs));
+    let raw =
+        std::fs::read_to_string(&abs).unwrap_or_else(|e| panic!("Cannot read {:?}: {e}", abs));
 
     let mut passed = 0usize;
     let mut failed = 0usize;
@@ -53,7 +53,8 @@ fn sapf_unit_tests() {
         test_num += 1;
         // Flush before running each test so we can see which test caused a crash
         use std::io::Write;
-        print!("#{test_num}.. "); let _ = std::io::stdout().flush();
+        print!("#{test_num}.. ");
+        let _ = std::io::stdout().flush();
         match try_run(src) {
             Some(true) => passed += 1,
             Some(false) => {
@@ -69,16 +70,11 @@ fn sapf_unit_tests() {
 
     let total = passed + failed + skipped;
     let pct = if total > 0 { passed * 100 / total } else { 0 };
-    println!(
-        "\nSAPF unit tests: {passed}/{total} ({pct}%)  failed={failed}  errors={skipped}"
-    );
+    println!("\nSAPF unit tests: {passed}/{total} ({pct}%)  failed={failed}  errors={skipped}");
     for f in &failures {
         println!("  {f}");
     }
 
     // M1 target: ≥30% pass rate
-    assert!(
-        pct >= 30,
-        "Pass rate {pct}% is below M1 target of 30%"
-    );
+    assert!(pct >= 30, "Pass rate {pct}% is below M1 target of 30%");
 }

@@ -6,7 +6,10 @@ pub enum Error {
     StackUnderflow { expected: usize, actual: usize },
 
     #[error("type error: expected {expected}, got {actual}")]
-    Type { expected: &'static str, actual: &'static str },
+    Type {
+        expected: &'static str,
+        actual: &'static str,
+    },
 
     #[error("unbound word: {0}")]
     Unbound(String),
@@ -15,7 +18,11 @@ pub enum Error {
     Arity { expected: usize, actual: usize },
 
     #[error("parse error at {line}:{col}: {msg}")]
-    Parse { line: usize, col: usize, msg: String },
+    Parse {
+        line: usize,
+        col: usize,
+        msg: String,
+    },
 
     #[error("io: {0}")]
     Io(#[from] std::io::Error),

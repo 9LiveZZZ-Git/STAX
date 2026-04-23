@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use egui::{Painter, Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
-use stax_graph::{Graph, Node, NodeId, PortKind};
 use crate::shell;
+use egui::{pos2, vec2, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2};
+use stax_graph::{Graph, Node, NodeId, PortKind};
+use std::collections::HashMap;
 
 // ── Public interaction types ───────────────────────────────────────────────
 
@@ -43,9 +43,9 @@ pub fn auto_layout(graph: &Graph) -> HashMap<NodeId, Pos2> {
         cols[depth[&nid]].push(nid);
     }
 
-    let col_w   = 180.0_f32;
-    let row_h   = 90.0_f32;
-    let margin  = 40.0_f32;
+    let col_w = 180.0_f32;
+    let row_h = 90.0_f32;
+    let margin = 40.0_f32;
     let mut positions = HashMap::new();
 
     for (col, nids) in cols.iter().enumerate() {
@@ -72,7 +72,9 @@ pub fn node_label(node: &Node) -> String {
 }
 
 fn node_sublabel(node: &Node) -> Option<String> {
-    if node.inputs.is_empty() { return None; }
+    if node.inputs.is_empty() {
+        return None;
+    }
     let labels: Vec<&str> = node.inputs.iter().map(|p| p.label.as_ref()).collect();
     Some(labels.join("  "))
 }
@@ -102,11 +104,15 @@ pub fn node_size(node: &Node) -> Vec2 {
 /// Screen position of a port center, given the node's top-left screen pos.
 /// `is_output`: true → bottom row, false → top row.
 pub fn port_screen_pos(node_screen: Pos2, node: &Node, port_idx: u8, is_output: bool) -> Pos2 {
-    let sz  = node_size(node);
-    let n   = if is_output { node.outputs.len() } else { node.inputs.len() } as f32;
+    let sz = node_size(node);
+    let n = if is_output {
+        node.outputs.len()
+    } else {
+        node.inputs.len()
+    } as f32;
     let idx = port_idx as f32;
-    let x   = node_screen.x + sz.x * (idx + 1.0) / (n + 1.0);
-    let y   = if is_output {
+    let x = node_screen.x + sz.x * (idx + 1.0) / (n + 1.0);
+    let y = if is_output {
         node_screen.y + sz.y
     } else {
         node_screen.y
@@ -119,7 +125,9 @@ pub fn port_screen_pos(node_screen: Pos2, node: &Node, port_idx: u8, is_output: 
 /// Dot-grid background matching the canvas-wrap CSS pattern (24px × 24px, 0.6px dots).
 pub fn draw_dot_grid(painter: &Painter, rect: Rect, pan: Vec2, zoom: f32) {
     let spacing = 24.0 * zoom;
-    if spacing < 4.0 { return; } // too dense to draw
+    if spacing < 4.0 {
+        return;
+    } // too dense to draw
 
     let offset_x = (pan.x * zoom).rem_euclid(spacing);
     let offset_y = (pan.y * zoom).rem_euclid(spacing);
@@ -149,17 +157,25 @@ pub fn draw_wire(painter: &Painter, from: Pos2, to: Pos2, kind: &PortKind, zoom:
             let t = i as f32 / 24.0;
             let u = 1.0 - t;
             pos2(
-                u*u*u*from.x + 3.0*u*u*t*c1.x + 3.0*u*t*t*c2.x + t*t*t*to.x,
-                u*u*u*from.y + 3.0*u*u*t*c1.y + 3.0*u*t*t*c2.y + t*t*t*to.y,
+                u * u * u * from.x
+                    + 3.0 * u * u * t * c1.x
+                    + 3.0 * u * t * t * c2.x
+                    + t * t * t * to.x,
+                u * u * u * from.y
+                    + 3.0 * u * u * t * c1.y
+                    + 3.0 * u * t * t * c2.y
+                    + t * t * t * to.y,
             )
         })
         .collect();
 
     let stroke = Stroke::new(w, color);
     if dashed {
-        for chunk in pts.windows(2).enumerate().filter_map(|(i, s)| {
-            if i % 2 == 0 { Some(s) } else { None }
-        }) {
+        for chunk in pts
+            .windows(2)
+            .enumerate()
+            .filter_map(|(i, s)| if i % 2 == 0 { Some(s) } else { None })
+        {
             painter.line_segment([chunk[0], chunk[1]], stroke);
         }
     } else {
@@ -181,22 +197,36 @@ pub fn draw_port(painter: &Painter, center: Pos2, kind: &PortKind, zoom: f32) {
                 // Dotted border approximation: draw 8 short segments around the rect
                 let segs = 8;
                 let pts = [
-                    rect.left_top(), rect.right_top(),
-                    rect.right_top(), rect.right_bottom(),
-                    rect.right_bottom(), rect.left_bottom(),
-                    rect.left_bottom(), rect.left_top(),
+                    rect.left_top(),
+                    rect.right_top(),
+                    rect.right_top(),
+                    rect.right_bottom(),
+                    rect.right_bottom(),
+                    rect.left_bottom(),
+                    rect.left_bottom(),
+                    rect.left_top(),
                 ];
                 for pair in pts.chunks(2).take(segs / 2) {
                     // Draw only odd segments (skip the alternate ones for dashed effect)
                     painter.line_segment([pair[0], pair[1]], Stroke::new(1.0 * zoom, color));
                 }
             } else {
-                painter.rect_stroke(rect, 0.0, Stroke::new(1.0 * zoom, color), StrokeKind::Outside);
+                painter.rect_stroke(
+                    rect,
+                    0.0,
+                    Stroke::new(1.0 * zoom, color),
+                    StrokeKind::Outside,
+                );
             }
         }
         PortKind::Fun => {
             painter.rect_filled(rect, 0.0, shell::PAPER);
-            painter.rect_stroke(rect, 0.0, Stroke::new(1.5 * zoom, color), StrokeKind::Outside);
+            painter.rect_stroke(
+                rect,
+                0.0,
+                Stroke::new(1.5 * zoom, color),
+                StrokeKind::Outside,
+            );
         }
         _ => {
             painter.rect_filled(rect, 0.0, color);
@@ -228,48 +258,63 @@ pub fn draw_node(
     let base_sz = node_size(node) * zoom;
     let full_sz = node_size_full(node, has_scope) * zoom;
 
-    let body    = Rect::from_min_size(screen_pos, base_sz);
-    let full    = Rect::from_min_size(screen_pos, full_sz);
-    let label   = node_label(node);
+    let body = Rect::from_min_size(screen_pos, base_sz);
+    let full = Rect::from_min_size(screen_pos, full_sz);
+    let label = node_label(node);
     let is_sink = node.is_sink();
 
     let mut interacts: Vec<NodeInteract> = Vec::new();
 
     // Background fill — covers the full rect (body + scope)
-    let fill = if is_sink { shell::SURFACE } else { shell::PAPER };
+    let fill = if is_sink {
+        shell::SURFACE
+    } else {
+        shell::PAPER
+    };
     painter.rect_filled(full, 0.0, fill);
 
     // Border drawn around the full node rect
-    let border_color = if selected { shell::WARM } else if hovered { shell::INK_2 } else { shell::INK };
+    let border_color = if selected {
+        shell::WARM
+    } else if hovered {
+        shell::INK_2
+    } else {
+        shell::INK
+    };
     let border_w = if selected { 1.5 * zoom } else { 1.0 * zoom };
-    painter.rect_stroke(full, 0.0, Stroke::new(border_w, border_color), StrokeKind::Outside);
+    painter.rect_stroke(
+        full,
+        0.0,
+        Stroke::new(border_w, border_color),
+        StrokeKind::Outside,
+    );
     if selected {
         let glow = full.expand(1.0 * zoom);
-        painter.rect_stroke(glow, 0.0, Stroke::new(0.5 * zoom, shell::WARM), StrokeKind::Outside);
+        painter.rect_stroke(
+            glow,
+            0.0,
+            Stroke::new(0.5 * zoom, shell::WARM),
+            StrokeKind::Outside,
+        );
     }
 
     // ── Adverb toggle badge ────────────────────────────────────────────────
     // Unified rendering: uses adverb_override first, falls back to node.adverb.
     let eff_adv = adverb_override.or(node.adverb);
 
-    let hdr_center = pos2(
-        body.center().x,
-        body.min.y + shell::NODE_HDR_H * zoom * 0.5,
-    );
+    let hdr_center = pos2(body.center().x, body.min.y + shell::NODE_HDR_H * zoom * 0.5);
 
     let (adv_text, adv_color) = match eff_adv {
-        None                            => ("·", shell::INK_3),
-        Some(stax_core::Adverb::Reduce)   => ("/", shell::WARM),
-        Some(stax_core::Adverb::Scan)     => ("\\", shell::WARM),
+        None => ("·", shell::INK_3),
+        Some(stax_core::Adverb::Reduce) => ("/", shell::WARM),
+        Some(stax_core::Adverb::Scan) => ("\\", shell::WARM),
         Some(stax_core::Adverb::Pairwise) => ("^", shell::WARM),
     };
 
     // Badge rect: 18×14 at right side of header
     let badge_x = body.max.x - 22.0 * zoom;
-    let badge_rect = Rect::from_center_size(
-        pos2(badge_x, hdr_center.y),
-        vec2(18.0 * zoom, 14.0 * zoom),
-    );
+    let badge_rect =
+        Rect::from_center_size(pos2(badge_x, hdr_center.y), vec2(18.0 * zoom, 14.0 * zoom));
     painter.rect_stroke(
         badge_rect,
         0.0,
@@ -283,7 +328,10 @@ pub fn draw_node(
         egui::FontId::new(9.0 * zoom, egui::FontFamily::Monospace),
         adv_color,
     );
-    interacts.push(NodeInteract { zone: badge_rect, action: NodeAction::CycleAdverb });
+    interacts.push(NodeInteract {
+        zone: badge_rect,
+        action: NodeAction::CycleAdverb,
+    });
 
     // ── Header label ───────────────────────────────────────────────────────
     let font_id = egui::FontId::new(12.0 * zoom, egui::FontFamily::Monospace);
@@ -332,10 +380,7 @@ pub fn draw_node(
     }
 
     // ── Input ports (top) + rank badges ───────────────────────────────────
-    let badge_font = egui::FontId::new(
-        8.0 * zoom.sqrt().max(0.4),
-        egui::FontFamily::Monospace,
-    );
+    let badge_font = egui::FontId::new(8.0 * zoom.sqrt().max(0.4), egui::FontFamily::Monospace);
     for (idx, port) in node.inputs.iter().enumerate() {
         let center = port_screen_pos(screen_pos, node, idx as u8, false);
         draw_port(painter, center, &port.kind, zoom);
@@ -345,10 +390,7 @@ pub fn draw_node(
         let badge_texts = ["·", "@", "@1", "@2", "@@"];
         let rank_text = badge_texts.get(rank as usize).copied().unwrap_or("·");
         let rank_color = if rank > 0 { shell::WARM } else { shell::INK_3 };
-        let badge_center = pos2(
-            center.x + 5.0 * zoom,
-            center.y - 8.0 * zoom,
-        );
+        let badge_center = pos2(center.x + 5.0 * zoom, center.y - 8.0 * zoom);
         painter.text(
             badge_center,
             egui::Align2::LEFT_CENTER,
@@ -379,7 +421,7 @@ pub fn draw_canvas_header(painter: &Painter, rect: Rect, view: crate::app::View)
     let mut x = rect.min.x + 12.0;
     let tabs = [
         (crate::app::View::Graph, "graph"),
-        (crate::app::View::Text,  "text"),
+        (crate::app::View::Text, "text"),
     ];
     let font = egui::FontId::new(10.0, egui::FontFamily::Monospace);
 
@@ -389,9 +431,19 @@ pub fn draw_canvas_header(painter: &Painter, rect: Rect, view: crate::app::View)
 
         if active {
             painter.rect_filled(tab_rect, 0.0, shell::PAPER);
-            painter.rect_stroke(tab_rect, 0.0, Stroke::new(1.0, shell::RULE), StrokeKind::Outside);
+            painter.rect_stroke(
+                tab_rect,
+                0.0,
+                Stroke::new(1.0, shell::RULE),
+                StrokeKind::Outside,
+            );
         } else {
-            painter.rect_stroke(tab_rect, 0.0, Stroke::new(0.5, shell::RULE_2), StrokeKind::Outside);
+            painter.rect_stroke(
+                tab_rect,
+                0.0,
+                Stroke::new(0.5, shell::RULE_2),
+                StrokeKind::Outside,
+            );
         }
 
         painter.text(
@@ -408,7 +460,12 @@ pub fn draw_canvas_header(painter: &Painter, rect: Rect, view: crate::app::View)
 // ── Wire hit-testing and ghost drawing ────────────────────────────────────────
 
 /// Convert a screen position to canvas (world) coordinates.
-pub fn screen_to_canvas(screen: egui::Pos2, pan: Vec2, zoom: f32, origin: egui::Pos2) -> egui::Pos2 {
+pub fn screen_to_canvas(
+    screen: egui::Pos2,
+    pan: Vec2,
+    zoom: f32,
+    origin: egui::Pos2,
+) -> egui::Pos2 {
     let rel = screen - origin;
     pos2(rel.x / zoom - pan.x, rel.y / zoom - pan.y)
 }
@@ -424,10 +481,12 @@ pub fn bezier_hit_test(from: Pos2, to: Pos2, target: Pos2, zoom: f32) -> bool {
         let t = i as f32 / 24.0;
         let u = 1.0 - t;
         let pt = pos2(
-            u*u*u*from.x + 3.0*u*u*t*c1.x + 3.0*u*t*t*c2.x + t*t*t*to.x,
-            u*u*u*from.y + 3.0*u*u*t*c1.y + 3.0*u*t*t*c2.y + t*t*t*to.y,
+            u * u * u * from.x + 3.0 * u * u * t * c1.x + 3.0 * u * t * t * c2.x + t * t * t * to.x,
+            u * u * u * from.y + 3.0 * u * u * t * c1.y + 3.0 * u * t * t * c2.y + t * t * t * to.y,
         );
-        if (pt - target).length() < threshold { return true; }
+        if (pt - target).length() < threshold {
+            return true;
+        }
     }
     false
 }
@@ -441,7 +500,11 @@ pub fn port_at_screen(
     zoom: f32,
     is_output: bool,
 ) -> Option<u8> {
-    let port_count = if is_output { node.outputs.len() } else { node.inputs.len() };
+    let port_count = if is_output {
+        node.outputs.len()
+    } else {
+        node.inputs.len()
+    };
     let threshold = shell::PORT_HALF * zoom * 4.0;
     for i in 0..port_count {
         let center = port_screen_pos(node_screen, node, i as u8, is_output);
@@ -457,16 +520,28 @@ pub fn draw_wire_ghost(painter: &Painter, from: Pos2, to: Pos2, zoom: f32) {
     let dy = ((to.y - from.y).abs() * 0.5).max(40.0 * zoom);
     let c1 = pos2(from.x, from.y + dy);
     let c2 = pos2(to.x, to.y - dy);
-    let pts: Vec<Pos2> = (0..=24).map(|i| {
-        let t = i as f32 / 24.0;
-        let u = 1.0 - t;
-        pos2(
-            u*u*u*from.x + 3.0*u*u*t*c1.x + 3.0*u*t*t*c2.x + t*t*t*to.x,
-            u*u*u*from.y + 3.0*u*u*t*c1.y + 3.0*u*t*t*c2.y + t*t*t*to.y,
-        )
-    }).collect();
+    let pts: Vec<Pos2> = (0..=24)
+        .map(|i| {
+            let t = i as f32 / 24.0;
+            let u = 1.0 - t;
+            pos2(
+                u * u * u * from.x
+                    + 3.0 * u * u * t * c1.x
+                    + 3.0 * u * t * t * c2.x
+                    + t * t * t * to.x,
+                u * u * u * from.y
+                    + 3.0 * u * u * t * c1.y
+                    + 3.0 * u * t * t * c2.y
+                    + t * t * t * to.y,
+            )
+        })
+        .collect();
     let stroke = egui::Stroke::new(1.5, shell::INK_2);
-    for chunk in pts.windows(2).enumerate().filter_map(|(i, s)| if i % 2 == 0 { Some(s) } else { None }) {
+    for chunk in pts
+        .windows(2)
+        .enumerate()
+        .filter_map(|(i, s)| if i % 2 == 0 { Some(s) } else { None })
+    {
         painter.line_segment([chunk[0], chunk[1]], stroke);
     }
 }
@@ -477,51 +552,51 @@ pub fn draw_wire_ghost(painter: &Painter, from: Pos2, to: Pos2, zoom: f32) {
 pub fn word_description(word: &str) -> Option<&'static str> {
     match word {
         "+" | "-" | "*" | "/" => Some("arithmetic binary op"),
-        "pow"   => Some("raise to power"),
-        "sqrt"  => Some("square root"),
-        "abs"   => Some("absolute value"),
-        "neg"   => Some("negate"),
+        "pow" => Some("raise to power"),
+        "sqrt" => Some("square root"),
+        "abs" => Some("absolute value"),
+        "neg" => Some("negate"),
         "%" | "mod" => Some("modulo"),
-        "min"   => Some("minimum of two values"),
-        "max"   => Some("maximum of two values"),
-        "clip"  => Some("clip to range [lo, hi]"),
+        "min" => Some("minimum of two values"),
+        "max" => Some("maximum of two values"),
+        "clip" => Some("clip to range [lo, hi]"),
         "floor" | "ceil" | "round" | "trunc" => Some("rounding function"),
         "sinosc" => Some("band-limited sine oscillator"),
         "saw" | "lfsaw" => Some("sawtooth oscillator"),
         "pulse" => Some("pulse / square oscillator"),
-        "tri"   => Some("triangle oscillator"),
+        "tri" => Some("triangle oscillator"),
         "wnoise" | "white" => Some("white noise generator"),
-        "pink" | "pnoise"  => Some("pink (1/f) noise"),
-        "brown"  => Some("brownian noise"),
+        "pink" | "pnoise" => Some("pink (1/f) noise"),
+        "brown" => Some("brownian noise"),
         "lpf" | "lpf2" => Some("2-pole lowpass filter"),
         "hpf" | "hpf2" => Some("2-pole highpass filter"),
         "svflp" => Some("SVF lowpass (Chamberlin)"),
         "svfhp" => Some("SVF highpass (Chamberlin)"),
         "svfbp" => Some("SVF bandpass (Chamberlin)"),
-        "rlpf"  => Some("resonant lowpass filter"),
-        "rhpf"  => Some("resonant highpass filter"),
-        "verb"  => Some("FDN reverb (Jot/Hadamard)"),
-        "pan2"  => Some("stereo panning"),
-        "play"  => Some("send to audio output (sink)"),
-        "stop"  => Some("stop audio playback"),
-        "p"     => Some("print top of stack"),
+        "rlpf" => Some("resonant lowpass filter"),
+        "rhpf" => Some("resonant highpass filter"),
+        "verb" => Some("FDN reverb (Jot/Hadamard)"),
+        "pan2" => Some("stereo panning"),
+        "play" => Some("send to audio output (sink)"),
+        "stop" => Some("stop audio playback"),
+        "p" => Some("print top of stack"),
         "trace" => Some("print with label"),
-        "ar"    => Some("attack-release envelope"),
-        "adsr"  => Some("4-stage ADSR envelope"),
-        "ord"   => Some("finite integer sequence 0..N"),
-        "nat"   => Some("infinite natural numbers 0,1,2,…"),
-        "ordz"  => Some("infinite 1,2,3,… sequence"),
-        "by"    => Some("arithmetic sequence (start step)"),
-        "cyc"   => Some("cycle a list infinitely"),
-        "N"     => Some("take N elements from stream"),
-        "take"  => Some("take first N elements"),
-        "drop"  => Some("drop first N elements"),
-        "zip"   => Some("interleave two streams"),
-        "dup"   => Some("duplicate top of stack"),
-        "swap"  => Some("swap top two stack items"),
-        "over"  => Some("copy second item to top"),
+        "ar" => Some("attack-release envelope"),
+        "adsr" => Some("4-stage ADSR envelope"),
+        "ord" => Some("finite integer sequence 0..N"),
+        "nat" => Some("infinite natural numbers 0,1,2,…"),
+        "ordz" => Some("infinite 1,2,3,… sequence"),
+        "by" => Some("arithmetic sequence (start step)"),
+        "cyc" => Some("cycle a list infinitely"),
+        "N" => Some("take N elements from stream"),
+        "take" => Some("take first N elements"),
+        "drop" => Some("drop first N elements"),
+        "zip" => Some("interleave two streams"),
+        "dup" => Some("duplicate top of stack"),
+        "swap" => Some("swap top two stack items"),
+        "over" => Some("copy second item to top"),
         "drop2" => Some("drop top stack item"),
-        _       => None,
+        _ => None,
     }
 }
 
@@ -532,41 +607,55 @@ pub fn node_arity_string(node: &Node) -> String {
 
 /// Port type summary string, e.g. "in: real signal  out: signal".
 pub fn node_port_type_string(node: &Node) -> String {
-    let ins: Vec<&str> = node.inputs.iter().map(|p| port_kind_name(&p.kind)).collect();
-    let outs: Vec<&str> = node.outputs.iter().map(|p| port_kind_name(&p.kind)).collect();
-    if ins.is_empty() && outs.is_empty() { return String::new(); }
+    let ins: Vec<&str> = node
+        .inputs
+        .iter()
+        .map(|p| port_kind_name(&p.kind))
+        .collect();
+    let outs: Vec<&str> = node
+        .outputs
+        .iter()
+        .map(|p| port_kind_name(&p.kind))
+        .collect();
+    if ins.is_empty() && outs.is_empty() {
+        return String::new();
+    }
     let mut s = String::new();
-    if !ins.is_empty()  { s.push_str(&format!("in: {}  ", ins.join(" "))); }
-    if !outs.is_empty() { s.push_str(&format!("out: {}", outs.join(" "))); }
+    if !ins.is_empty() {
+        s.push_str(&format!("in: {}  ", ins.join(" ")));
+    }
+    if !outs.is_empty() {
+        s.push_str(&format!("out: {}", outs.join(" ")));
+    }
     s
 }
 
 fn port_kind_name(kind: &PortKind) -> &'static str {
     match kind {
-        PortKind::Real   => "real",
+        PortKind::Real => "real",
         PortKind::Signal => "signal",
         PortKind::Stream => "stream",
-        PortKind::Fun    => "fun",
-        PortKind::Form   => "form",
-        PortKind::Any    => "any",
-        PortKind::Str    => "str",
-        PortKind::Sym    => "sym",
+        PortKind::Fun => "fun",
+        PortKind::Form => "form",
+        PortKind::Any => "any",
+        PortKind::Str => "str",
+        PortKind::Sym => "sym",
     }
 }
 
 /// Port-type legend in the bottom-left of the canvas.
 pub fn draw_legend(painter: &Painter, rect: Rect) {
     let entries: &[(&str, PortKind)] = &[
-        ("real",   PortKind::Real),
+        ("real", PortKind::Real),
         ("signal", PortKind::Signal),
         ("stream", PortKind::Stream),
-        ("fun",    PortKind::Fun),
-        ("form",   PortKind::Form),
+        ("fun", PortKind::Fun),
+        ("form", PortKind::Form),
     ];
 
-    let pad    = 8.0;
+    let pad = 8.0;
     let item_w = 54.0;
-    let h      = 22.0;
+    let h = 22.0;
     let total_w = entries.len() as f32 * item_w + pad * 2.0;
     let legend_rect = Rect::from_min_size(
         pos2(rect.min.x + 12.0, rect.max.y - h - 10.0),
@@ -574,7 +663,12 @@ pub fn draw_legend(painter: &Painter, rect: Rect) {
     );
 
     painter.rect_filled(legend_rect, 0.0, shell::PAPER);
-    painter.rect_stroke(legend_rect, 0.0, Stroke::new(1.0, shell::RULE), StrokeKind::Outside);
+    painter.rect_stroke(
+        legend_rect,
+        0.0,
+        Stroke::new(1.0, shell::RULE),
+        StrokeKind::Outside,
+    );
 
     let font = egui::FontId::new(10.0, egui::FontFamily::Monospace);
     let mut x = legend_rect.min.x + pad;
@@ -592,7 +686,9 @@ pub fn draw_legend(painter: &Painter, rect: Rect) {
                 painter.rect_filled(sq, 0.0, shell::PAPER);
                 painter.rect_stroke(sq, 0.0, Stroke::new(1.5, color), StrokeKind::Outside);
             }
-            _ => { painter.rect_filled(sq, 0.0, color); }
+            _ => {
+                painter.rect_filled(sq, 0.0, color);
+            }
         }
         painter.text(
             pos2(x + 18.0, cy),

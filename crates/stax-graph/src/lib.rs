@@ -52,14 +52,14 @@ pub enum PortKind {
 impl From<ValueKind> for PortKind {
     fn from(k: ValueKind) -> Self {
         match k {
-            ValueKind::Real   => PortKind::Real,
+            ValueKind::Real => PortKind::Real,
             ValueKind::Signal => PortKind::Signal,
             ValueKind::Stream => PortKind::Stream,
-            ValueKind::Fun    => PortKind::Fun,
-            ValueKind::Form   => PortKind::Form,
-            ValueKind::Str    => PortKind::Str,
-            ValueKind::Sym    => PortKind::Sym,
-            _                 => PortKind::Any,
+            ValueKind::Fun => PortKind::Fun,
+            ValueKind::Form => PortKind::Form,
+            ValueKind::Str => PortKind::Str,
+            ValueKind::Sym => PortKind::Sym,
+            _ => PortKind::Any,
         }
     }
 }
@@ -76,7 +76,12 @@ pub struct Port {
 
 impl Port {
     fn any() -> Self {
-        Port { kind: PortKind::Any, label: Arc::from(""), each_depth: 0, each_order: 0 }
+        Port {
+            kind: PortKind::Any,
+            label: Arc::from(""),
+            each_depth: 0,
+            each_order: 0,
+        }
     }
     pub fn with_each(mut self, depth: u8, order: u8) -> Self {
         self.each_depth = depth;
@@ -132,7 +137,10 @@ pub enum NodeKind {
     /// `= word` — bind TOS to `word` in the current scope.
     Bind(Arc<str>),
     /// `= (a b c)` / `= [a b c]` — multi-bind.
-    BindMany { names: Arc<[Arc<str>]>, list_mode: bool },
+    BindMany {
+        names: Arc<[Arc<str>]>,
+        list_mode: bool,
+    },
     /// `!` — call the function on TOS.
     Call,
     /// `[` — records stack depth for list construction.
@@ -142,33 +150,37 @@ pub enum NodeKind {
     /// `{ :key val }` — build a Form.
     MakeForm { keys: Arc<[Arc<str>]>, parent: bool },
     /// `\params [body]` — build a Function.
-    MakeFun { params: Arc<[Arc<str>]>, body: Arc<[Op]> },
+    MakeFun {
+        params: Arc<[Arc<str>]>,
+        body: Arc<[Op]>,
+    },
 }
 
 impl NodeKind {
     pub fn label(&self) -> String {
         match self {
-            NodeKind::Literal(v)  => format!("{v:?}"),
-            NodeKind::Word(w)     => w.to_string(),
-            NodeKind::Quote(w)    => format!("`{w}"),
-            NodeKind::Sym(w)      => format!("'{w}"),
-            NodeKind::FormGet(w)  => format!(",{w}"),
-            NodeKind::FormApply(w)=> format!(".{w}"),
-            NodeKind::Bind(w)     => format!("={w}"),
+            NodeKind::Literal(v) => format!("{v:?}"),
+            NodeKind::Word(w) => w.to_string(),
+            NodeKind::Quote(w) => format!("`{w}"),
+            NodeKind::Sym(w) => format!("'{w}"),
+            NodeKind::FormGet(w) => format!(",{w}"),
+            NodeKind::FormApply(w) => format!(".{w}"),
+            NodeKind::Bind(w) => format!("={w}"),
             NodeKind::BindMany { names, .. } => {
                 let ns: Vec<&str> = names.iter().map(|s| s.as_ref()).collect();
                 format!("=({})", ns.join(" "))
             }
-            NodeKind::Call                    => "!".into(),
-            NodeKind::ListMark                => "[".into(),
-            NodeKind::MakeList { signal }     => if *signal { "#]" } else { "]" }.into(),
-            NodeKind::MakeForm { keys, .. }   => {
+            NodeKind::Call => "!".into(),
+            NodeKind::ListMark => "[".into(),
+            NodeKind::MakeList { signal } => if *signal { "#]" } else { "]" }.into(),
+            NodeKind::MakeForm { keys, .. } => {
                 let ks: Vec<&str> = keys.iter().map(|s| s.as_ref()).collect();
                 format!("{{{}}}", ks.join(" "))
             }
-            NodeKind::MakeFun { params, .. }  => {
-                if params.is_empty() { "\\[]".into() }
-                else {
+            NodeKind::MakeFun { params, .. } => {
+                if params.is_empty() {
+                    "\\[]".into()
+                } else {
                     let ps: Vec<&str> = params.iter().map(|s| s.as_ref()).collect();
                     format!("\\[{}]", ps.join(" "))
                 }
@@ -205,7 +217,9 @@ pub struct Graph {
 }
 
 impl Graph {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     // ── Construction ─────────────────────────────────────────────────────────
 
@@ -215,7 +229,7 @@ impl Graph {
         let node = Node {
             id,
             kind,
-            inputs:  (0..n_in).map(|_| Port::any()).collect(),
+            inputs: (0..n_in).map(|_| Port::any()).collect(),
             outputs: (0..n_out).map(|_| Port::any()).collect(),
             pos: [0.0, 0.0],
             adverb: None,
@@ -234,16 +248,26 @@ impl Graph {
 
     // ── Queries ──────────────────────────────────────────────────────────────
 
-    pub fn node(&self, id: NodeId) -> Option<&Node>     { self.nodes.get(&id) }
-    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> { self.nodes.get_mut(&id) }
+    pub fn node(&self, id: NodeId) -> Option<&Node> {
+        self.nodes.get(&id)
+    }
+    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
+        self.nodes.get_mut(&id)
+    }
 
     pub fn nodes_in_order(&self) -> impl Iterator<Item = &Node> {
         self.node_order.iter().filter_map(|id| self.nodes.get(id))
     }
 
-    pub fn edges(&self) -> &[Edge] { &self.edges }
-    pub fn node_count(&self) -> usize { self.nodes.len() }
-    pub fn edge_count(&self) -> usize { self.edges.len() }
+    pub fn edges(&self) -> &[Edge] {
+        &self.edges
+    }
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+    pub fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
 
     /// The output `PortRef` that feeds a given input port, if any.
     pub fn source_of(&self, dst: PortRef) -> Option<PortRef> {
@@ -252,17 +276,29 @@ impl Graph {
 
     /// All input `PortRef`s that a given output port feeds.
     pub fn consumers_of(&self, src: PortRef) -> Vec<PortRef> {
-        self.edges.iter().filter(|e| e.src == src).map(|e| e.dst).collect()
+        self.edges
+            .iter()
+            .filter(|e| e.src == src)
+            .map(|e| e.dst)
+            .collect()
     }
 
     /// Direct predecessor NodeIds for a given node (via data edges).
     pub fn predecessors(&self, id: NodeId) -> Vec<NodeId> {
-        let node = match self.nodes.get(&id) { Some(n) => n, None => return vec![] };
+        let node = match self.nodes.get(&id) {
+            Some(n) => n,
+            None => return vec![],
+        };
         let mut out: Vec<NodeId> = Vec::new();
         for (pi, _) in node.inputs.iter().enumerate() {
-            let dst = PortRef { node: id, port: pi as u8 };
+            let dst = PortRef {
+                node: id,
+                port: pi as u8,
+            };
             if let Some(src) = self.source_of(dst) {
-                if !out.contains(&src.node) { out.push(src.node); }
+                if !out.contains(&src.node) {
+                    out.push(src.node);
+                }
             }
         }
         out
@@ -270,12 +306,20 @@ impl Graph {
 
     /// Direct successor NodeIds for a given node (via data edges).
     pub fn successors(&self, id: NodeId) -> Vec<NodeId> {
-        let node = match self.nodes.get(&id) { Some(n) => n, None => return vec![] };
+        let node = match self.nodes.get(&id) {
+            Some(n) => n,
+            None => return vec![],
+        };
         let mut out: Vec<NodeId> = Vec::new();
         for (pi, _) in node.outputs.iter().enumerate() {
-            let src = PortRef { node: id, port: pi as u8 };
+            let src = PortRef {
+                node: id,
+                port: pi as u8,
+            };
             for dst in self.consumers_of(src) {
-                if !out.contains(&dst.node) { out.push(dst.node); }
+                if !out.contains(&dst.node) {
+                    out.push(dst.node);
+                }
             }
         }
         out
@@ -291,7 +335,9 @@ impl Graph {
 
     /// Remove a node and all incident edges; returns the removed edge ids.
     pub fn remove_node(&mut self, id: NodeId) -> Vec<EdgeId> {
-        let removed: Vec<EdgeId> = self.edges.iter()
+        let removed: Vec<EdgeId> = self
+            .edges
+            .iter()
             .filter(|e| e.src.node == id || e.dst.node == id)
             .map(|e| e.id)
             .collect();
@@ -303,7 +349,9 @@ impl Graph {
 
     /// Add an edge; returns `None` if `dst` already has a source (no fan-in).
     pub fn add_edge(&mut self, src: PortRef, dst: PortRef) -> Option<EdgeId> {
-        if self.source_of(dst).is_some() { return None; }
+        if self.source_of(dst).is_some() {
+            return None;
+        }
         Some(self.connect(src, dst))
     }
 
@@ -316,7 +364,8 @@ impl Graph {
 
     /// All edge ids incident to a node (either end).
     pub fn edges_of(&self, nid: NodeId) -> Vec<EdgeId> {
-        self.edges.iter()
+        self.edges
+            .iter()
             .filter(|e| e.src.node == nid || e.dst.node == nid)
             .map(|e| e.id)
             .collect()
@@ -339,88 +388,69 @@ impl Graph {
 fn word_arity(word: &str) -> (usize, usize) {
     match word {
         // Stack manipulation
-        "dup"    => (1, 2), "drop"   => (1, 0), "swap"  => (2, 2),
-        "over"   => (2, 3), "rot"    => (3, 3), "nip"   => (2, 1),
-        "tuck"   => (2, 3), "2dup"   => (2, 4), "2drop" => (2, 0),
-        "2swap"  => (4, 4),
+        "dup" => (1, 2),
+        "drop" => (1, 0),
+        "swap" => (2, 2),
+        "over" => (2, 3),
+        "rot" => (3, 3),
+        "nip" => (2, 1),
+        "tuck" => (2, 3),
+        "2dup" => (2, 4),
+        "2drop" => (2, 0),
+        "2swap" => (4, 4),
 
         // Binary → 1
-        "+"  | "-"  | "*"   | "/"   | "%"   | "**"  |
-        "==" | "!=" | "<"   | "<="  | ">"   | ">="  |
-        "&"  | "|"  |
-        "min" | "max" | "atan2" | "hypot" | "pow" |
-        "to"  | "by" | "zip" | "lace" | "concat" | "++" |
-        "cons" | "pair" | "tuple" |
-        "shift" | "rot_left" | "rot_right" |
-        "has" | "dot" | "set" |
-        "lpf1" | "hpf1" | "lpf" | "lpf2" | "hpf" | "hpf2" |
-        "pulse" | "lfnoise0" | "lfnoise1" | "dust" | "dust2" | "sah" |
-        "ar" | "skip" | "take" |
-        "upSmp" | "dwnSmp" |
-        "grow" | "ngrow" | "byz" |
-        "chebdist" | "farrow" |
-        "logistic" | "coins" |
-        "lpcanalz" | "goertzel" | "goertzelc" |
-        "pan3" | "disperser" | "delayn" |
-        "gaussian" | "kaiser" |
-        "lindiv" | "expdiv" => (2, 1),
+        "+" | "-" | "*" | "/" | "%" | "**" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&" | "|"
+        | "min" | "max" | "atan2" | "hypot" | "pow" | "to" | "by" | "zip" | "lace" | "concat"
+        | "++" | "cons" | "pair" | "tuple" | "shift" | "rot_left" | "rot_right" | "has" | "dot"
+        | "set" | "lpf1" | "hpf1" | "lpf" | "lpf2" | "hpf" | "hpf2" | "pulse" | "lfnoise0"
+        | "lfnoise1" | "dust" | "dust2" | "sah" | "ar" | "skip" | "take" | "upSmp" | "dwnSmp"
+        | "grow" | "ngrow" | "byz" | "chebdist" | "farrow" | "logistic" | "coins" | "lpcanalz"
+        | "goertzel" | "goertzelc" | "pan3" | "disperser" | "delayn" | "gaussian" | "kaiser"
+        | "lindiv" | "expdiv" => (2, 1),
 
         // Unary → 1
-        "neg"  | "abs"  | "recip" | "sqrt" | "exp"  | "log" |
-        "log2" | "log10"| "sin"   | "cos"  | "tan"  | "asin"|
-        "acos" | "atan" | "sinh"  | "cosh" | "tanh" |
-        "ceil" | "floor"| "round" | "trunc"| "frac" |
-        "sign" | "not"  | "sq"    | "cb"   | "sinc" |
-        "size" | "#"    | "len"   |
-        "first"| "last" | "butlast"| "rest"|
-        "reverse"| "sort"| "grade"| "flatten"| "mirror"| "cyc"|
-        "isReal"| "isStr"| "isSym"| "isStream"| "isSignal"|
-        "isFun"| "isForm"| "isRef"| "isNil"|
-        "keys" | "values"| "parent"| "local"|
-        "ref"  | "get"  | "upd"   |
-        "sinosc"| "saw" | "lfsaw" | "tri"  | "square"| "impulse"|
-        "wnoise"| "white"| "pnoise"| "pink" | "brown"|
-        "fadein"| "fadeout"| "hanenv"| "decay"| "decay2"|
-        "fib"  | "primes"| "ever" | "2X"   |
-        "normalize"| "peak"| "rms"| "dur"  |
-        "mdct" | "imdct"| "hilbert"|
-        "midihz"| "midinote"| "dbtamp"| "amptodb"|
-        "hann" | "hamming"| "blackman"| "blackmanharris"|
-        "nuttall"| "flattop"|
-        "p"    | "trace"| "inspect"| "bench"|
-        "softclip"| "hardclip"| "tanhsat"| "cubicsat"| "atansat"|
-        "2ple" | "3ple" | "4ple" | "5ple"  | "6ple"| "7ple"| "8ple" => (1, 1),
+        "neg" | "abs" | "recip" | "sqrt" | "exp" | "log" | "log2" | "log10" | "sin" | "cos"
+        | "tan" | "asin" | "acos" | "atan" | "sinh" | "cosh" | "tanh" | "ceil" | "floor"
+        | "round" | "trunc" | "frac" | "sign" | "not" | "sq" | "cb" | "sinc" | "size" | "#"
+        | "len" | "first" | "last" | "butlast" | "rest" | "reverse" | "sort" | "grade"
+        | "flatten" | "mirror" | "cyc" | "isReal" | "isStr" | "isSym" | "isStream" | "isSignal"
+        | "isFun" | "isForm" | "isRef" | "isNil" | "keys" | "values" | "parent" | "local"
+        | "ref" | "get" | "upd" | "sinosc" | "saw" | "lfsaw" | "tri" | "square" | "impulse"
+        | "wnoise" | "white" | "pnoise" | "pink" | "brown" | "fadein" | "fadeout" | "hanenv"
+        | "decay" | "decay2" | "fib" | "primes" | "ever" | "2X" | "normalize" | "peak" | "rms"
+        | "dur" | "mdct" | "imdct" | "hilbert" | "midihz" | "midinote" | "dbtamp" | "amptodb"
+        | "hann" | "hamming" | "blackman" | "blackmanharris" | "nuttall" | "flattop" | "p"
+        | "trace" | "inspect" | "bench" | "softclip" | "hardclip" | "tanhsat" | "cubicsat"
+        | "atansat" | "2ple" | "3ple" | "4ple" | "5ple" | "6ple" | "7ple" | "8ple" => (1, 1),
 
         // Unary → 2
         "uncons" => (1, 2),
 
         // 3-arg → 1
-        "clip" | "wrap" | "N" | "nby" |
-        "rlpf" | "rhpf" | "lag" | "lag2" | "leakdc" |
-        "svflp"| "svfhp"| "svfbp"| "svfnotch"|
-        "firlp"| "firhp"| "combn"| "pluck"|
-        "thiran"| "pan2"| "bal2"| "rot2"|
-        "rands"| "irands"| "picks"|
-        "skipWhile"| "keepWhile" => (3, 1),
+        "clip" | "wrap" | "N" | "nby" | "rlpf" | "rhpf" | "lag" | "lag2" | "leakdc" | "svflp"
+        | "svfhp" | "svfbp" | "svfnotch" | "firlp" | "firhp" | "combn" | "pluck" | "thiran"
+        | "pan2" | "bal2" | "rot2" | "rands" | "irands" | "picks" | "skipWhile" | "keepWhile" => {
+            (3, 1)
+        }
 
         // 4-arg → 1
-        "adsr" | "verb" | "lpcsynth" | "pvocstretch" | "pvocp" |
-        "firbp"| "nby4" | "henon" => (4, 1),
+        "adsr" | "verb" | "lpcsynth" | "pvocstretch" | "pvocp" | "firbp" | "nby4" | "henon" => {
+            (4, 1)
+        }
 
         // 5-arg → 1
-        "linlin"| "linexp"| "explin"| "bilin"| "biexp"|
-        "vanderpol"| "cqt" => (5, 1),
+        "linlin" | "linexp" | "explin" | "bilin" | "biexp" | "vanderpol" | "cqt" => (5, 1),
 
         // 6-arg → 1
-        "compressor"| "rossler" => (6, 1),
+        "compressor" | "rossler" => (6, 1),
 
         // 7-arg → 1
-        "lorenz"| "grain" => (7, 1),
+        "lorenz" | "grain" => (7, 1),
 
         // Sources (0 pops, 1 push)
-        "ord"  | "ordz" | "nat"  | "natz" |
-        "sr"   | "nyq"  | "isr"  | "inyq" | "rps" |
-        "rand" | "irand"| "muss" => (0, 1),
+        "ord" | "ordz" | "nat" | "natz" | "sr" | "nyq" | "isr" | "inyq" | "rps" | "rand"
+        | "irand" | "muss" => (0, 1),
 
         // Sinks (consume, don't push)
         "play" => (1, 0),
@@ -475,19 +505,30 @@ pub fn lift(ops: &[Op]) -> Graph {
 
                 // Attach pending adverb.
                 if let Some(adv) = pending_adverb.take() {
-                    if let Some(n) = g.node_mut(nid) { n.adverb = Some(adv); }
+                    if let Some(n) = g.node_mut(nid) {
+                        n.adverb = Some(adv);
+                    }
                 }
 
                 // Connect inputs from the stack (oldest first = port 0 = left operand).
                 let drain_from = stack.len().saturating_sub(n_pops);
                 let srcs: Vec<PortRef> = stack.drain(drain_from..).collect();
                 for (pi, src) in srcs.into_iter().enumerate() {
-                    g.connect(src, PortRef { node: nid, port: pi as u8 });
+                    g.connect(
+                        src,
+                        PortRef {
+                            node: nid,
+                            port: pi as u8,
+                        },
+                    );
                 }
 
                 // Push outputs onto the symbolic stack.
                 for i in 0..n_pushes {
-                    stack.push(PortRef { node: nid, port: i as u8 });
+                    stack.push(PortRef {
+                        node: nid,
+                        port: i as u8,
+                    });
                 }
             }
 
@@ -544,13 +585,23 @@ pub fn lift(ops: &[Op]) -> Graph {
             Op::BindMany { names, list_mode } => {
                 let n = names.len();
                 let nid = g.add_node(
-                    NodeKind::BindMany { names: names.clone(), list_mode: *list_mode },
-                    n, 0,
+                    NodeKind::BindMany {
+                        names: names.clone(),
+                        list_mode: *list_mode,
+                    },
+                    n,
+                    0,
                 );
                 let drain_from = stack.len().saturating_sub(n);
                 let srcs: Vec<PortRef> = stack.drain(drain_from..).collect();
                 for (pi, src) in srcs.into_iter().enumerate() {
-                    g.connect(src, PortRef { node: nid, port: pi as u8 });
+                    g.connect(
+                        src,
+                        PortRef {
+                            node: nid,
+                            port: pi as u8,
+                        },
+                    );
                 }
             }
 
@@ -578,7 +629,13 @@ pub fn lift(ops: &[Op]) -> Graph {
                 let drain_from = stack.len().saturating_sub(count);
                 let srcs: Vec<PortRef> = stack.drain(drain_from..).collect();
                 for (pi, src) in srcs.into_iter().enumerate() {
-                    g.connect(src, PortRef { node: nid, port: pi as u8 });
+                    g.connect(
+                        src,
+                        PortRef {
+                            node: nid,
+                            port: pi as u8,
+                        },
+                    );
                 }
                 stack.push(PortRef { node: nid, port: 0 });
             }
@@ -587,13 +644,23 @@ pub fn lift(ops: &[Op]) -> Graph {
             Op::MakeForm { keys, parent } => {
                 let n = keys.len() + if *parent { 1 } else { 0 };
                 let nid = g.add_node(
-                    NodeKind::MakeForm { keys: keys.clone(), parent: *parent },
-                    n, 1,
+                    NodeKind::MakeForm {
+                        keys: keys.clone(),
+                        parent: *parent,
+                    },
+                    n,
+                    1,
                 );
                 let drain_from = stack.len().saturating_sub(n);
                 let srcs: Vec<PortRef> = stack.drain(drain_from..).collect();
                 for (pi, src) in srcs.into_iter().enumerate() {
-                    g.connect(src, PortRef { node: nid, port: pi as u8 });
+                    g.connect(
+                        src,
+                        PortRef {
+                            node: nid,
+                            port: pi as u8,
+                        },
+                    );
                 }
                 stack.push(PortRef { node: nid, port: 0 });
             }
@@ -602,8 +669,12 @@ pub fn lift(ops: &[Op]) -> Graph {
             Op::MakeFun { params, body } => {
                 // Closes over the current environment; doesn't consume stack values.
                 let nid = g.add_node(
-                    NodeKind::MakeFun { params: params.clone(), body: body.clone() },
-                    0, 1,
+                    NodeKind::MakeFun {
+                        params: params.clone(),
+                        body: body.clone(),
+                    },
+                    0,
+                    1,
                 );
                 stack.push(PortRef { node: nid, port: 0 });
             }
@@ -632,7 +703,10 @@ pub fn lower(g: &Graph) -> Vec<Op> {
 pub fn lower_ordered(g: &Graph, order: impl Iterator<Item = NodeId>) -> Vec<Op> {
     let mut ops = Vec::new();
     for nid in order {
-        let node = match g.node(nid) { Some(n) => n, None => continue };
+        let node = match g.node(nid) {
+            Some(n) => n,
+            None => continue,
+        };
 
         // Emit adverb just before the word it annotates.
         if let (NodeKind::Word(_), Some(adv)) = (&node.kind, node.adverb) {
@@ -640,25 +714,28 @@ pub fn lower_ordered(g: &Graph, order: impl Iterator<Item = NodeId>) -> Vec<Op> 
         }
 
         let op = match &node.kind {
-            NodeKind::Literal(v)  => Op::Lit(v.clone()),
-            NodeKind::Word(w)     => Op::Word(w.clone()),
-            NodeKind::Quote(w)    => Op::Quote(w.clone()),
-            NodeKind::Sym(w)      => Op::Sym(w.clone()),
-            NodeKind::FormGet(w)  => Op::FormGet(w.clone()),
-            NodeKind::FormApply(w)=> Op::FormApply(w.clone()),
-            NodeKind::Bind(w)     => Op::Bind(w.clone()),
-            NodeKind::BindMany { names, list_mode } => {
-                Op::BindMany { names: names.clone(), list_mode: *list_mode }
-            }
-            NodeKind::Call        => Op::Call,
-            NodeKind::ListMark    => Op::ListMark,
+            NodeKind::Literal(v) => Op::Lit(v.clone()),
+            NodeKind::Word(w) => Op::Word(w.clone()),
+            NodeKind::Quote(w) => Op::Quote(w.clone()),
+            NodeKind::Sym(w) => Op::Sym(w.clone()),
+            NodeKind::FormGet(w) => Op::FormGet(w.clone()),
+            NodeKind::FormApply(w) => Op::FormApply(w.clone()),
+            NodeKind::Bind(w) => Op::Bind(w.clone()),
+            NodeKind::BindMany { names, list_mode } => Op::BindMany {
+                names: names.clone(),
+                list_mode: *list_mode,
+            },
+            NodeKind::Call => Op::Call,
+            NodeKind::ListMark => Op::ListMark,
             NodeKind::MakeList { signal } => Op::MakeList { signal: *signal },
-            NodeKind::MakeForm { keys, parent } => {
-                Op::MakeForm { keys: keys.clone(), parent: *parent }
-            }
-            NodeKind::MakeFun { params, body } => {
-                Op::MakeFun { params: params.clone(), body: body.clone() }
-            }
+            NodeKind::MakeForm { keys, parent } => Op::MakeForm {
+                keys: keys.clone(),
+                parent: *parent,
+            },
+            NodeKind::MakeFun { params, body } => Op::MakeFun {
+                params: params.clone(),
+                body: body.clone(),
+            },
         };
         ops.push(op);
     }
@@ -673,8 +750,12 @@ pub fn lower_ordered(g: &Graph, order: impl Iterator<Item = NodeId>) -> Vec<Op> 
 /// Used by the M5 editor when nodes have been repositioned visually. For
 /// graphs produced by `lift` (no reordering), `lower` is simpler and faster.
 pub fn topo_sort(g: &Graph) -> Vec<NodeId> {
-    let order_idx: HashMap<NodeId, usize> = g.node_order
-        .iter().enumerate().map(|(i, &id)| (id, i)).collect();
+    let order_idx: HashMap<NodeId, usize> = g
+        .node_order
+        .iter()
+        .enumerate()
+        .map(|(i, &id)| (id, i))
+        .collect();
 
     // Kahn's algorithm with insertion-order tie-breaking.
     let mut in_deg: HashMap<NodeId, usize> = g.node_order.iter().map(|&id| (id, 0)).collect();
@@ -682,7 +763,8 @@ pub fn topo_sort(g: &Graph) -> Vec<NodeId> {
         *in_deg.entry(edge.dst.node).or_insert(0) += 1;
     }
 
-    let mut ready: Vec<NodeId> = in_deg.iter()
+    let mut ready: Vec<NodeId> = in_deg
+        .iter()
         .filter(|(_, &d)| d == 0)
         .map(|(&id, _)| id)
         .collect();
@@ -711,7 +793,9 @@ pub fn topo_sort(g: &Graph) -> Vec<NodeId> {
 
     // Any nodes not reached (disconnected singletons) — append in insertion order.
     for &id in &g.node_order {
-        if !result.contains(&id) { result.push(id); }
+        if !result.contains(&id) {
+            result.push(id);
+        }
     }
 
     result
@@ -721,8 +805,8 @@ pub fn topo_sort(g: &Graph) -> Vec<NodeId> {
 
 fn adverb_suffix(adv: &Adverb) -> &'static str {
     match adv {
-        Adverb::Reduce   => "/",
-        Adverb::Scan     => "\\",
+        Adverb::Reduce => "/",
+        Adverb::Scan => "\\",
         Adverb::Pairwise => "^",
     }
 }
@@ -740,7 +824,9 @@ pub fn ops_to_source_text(ops: &[Op]) -> String {
             Op::ListMark => mark_stk.push(i),
             Op::MakeList { signal } => {
                 if let Some(m) = mark_stk.pop() {
-                    if *signal { sig_marks.insert(m); }
+                    if *signal {
+                        sig_marks.insert(m);
+                    }
                 }
             }
             _ => {}
@@ -752,60 +838,93 @@ pub fn ops_to_source_text(ops: &[Op]) -> String {
 
     for (i, op) in ops.iter().enumerate() {
         match op {
-            Op::Adverb(adv) => { pending_adv = Some(*adv); }
+            Op::Adverb(adv) => {
+                pending_adv = Some(*adv);
+            }
             _ => {
-                if !out.is_empty() { out.push(' '); }
+                if !out.is_empty() {
+                    out.push(' ');
+                }
                 match op {
-                    Op::Lit(v) => {
-                        match v {
-                            Value::Real(x) => {
-                                if *x == x.floor() && x.abs() < 1_000_000.0 {
-                                    out.push_str(&format!("{}", *x as i64));
-                                } else {
-                                    out.push_str(&format!("{x}"));
-                                }
+                    Op::Lit(v) => match v {
+                        Value::Real(x) => {
+                            if *x == x.floor() && x.abs() < 1_000_000.0 {
+                                out.push_str(&format!("{}", *x as i64));
+                            } else {
+                                out.push_str(&format!("{x}"));
                             }
-                            Value::Str(s) => { out.push('"'); out.push_str(s); out.push('"'); }
-                            Value::Sym(s) => { out.push('\''); out.push_str(s); }
-                            Value::Nil    => out.push_str("nil"),
-                            _             => out.push('0'),
                         }
-                    }
+                        Value::Str(s) => {
+                            out.push('"');
+                            out.push_str(s);
+                            out.push('"');
+                        }
+                        Value::Sym(s) => {
+                            out.push('\'');
+                            out.push_str(s);
+                        }
+                        Value::Nil => out.push_str("nil"),
+                        _ => out.push('0'),
+                    },
                     Op::Word(w) => {
                         out.push_str(w);
                         if let Some(adv) = pending_adv.take() {
                             out.push_str(adverb_suffix(&adv));
                         }
                     }
-                    Op::ListMark  => out.push_str(if sig_marks.contains(&i) { "#[" } else { "[" }),
+                    Op::ListMark => out.push_str(if sig_marks.contains(&i) { "#[" } else { "[" }),
                     Op::MakeList { .. } => out.push(']'),
-                    Op::Bind(n) => { out.push_str("= "); out.push_str(n); }
+                    Op::Bind(n) => {
+                        out.push_str("= ");
+                        out.push_str(n);
+                    }
                     Op::BindMany { names, list_mode } => {
                         let (l, r) = if *list_mode { ("[", "]") } else { ("(", ")") };
-                        out.push_str("= "); out.push_str(l);
+                        out.push_str("= ");
+                        out.push_str(l);
                         for (j, n) in names.iter().enumerate() {
-                            if j > 0 { out.push(' '); }
+                            if j > 0 {
+                                out.push(' ');
+                            }
                             out.push_str(n);
                         }
                         out.push_str(r);
                     }
-                    Op::Quote(n)      => { out.push('`'); out.push_str(n); }
-                    Op::Sym(n)        => { out.push('\''); out.push_str(n); }
-                    Op::Call          => out.push('!'),
-                    Op::FormGet(n)    => { out.push(','); out.push_str(n); }
-                    Op::FormApply(n)  => { out.push('.'); out.push_str(n); }
+                    Op::Quote(n) => {
+                        out.push('`');
+                        out.push_str(n);
+                    }
+                    Op::Sym(n) => {
+                        out.push('\'');
+                        out.push_str(n);
+                    }
+                    Op::Call => out.push('!'),
+                    Op::FormGet(n) => {
+                        out.push(',');
+                        out.push_str(n);
+                    }
+                    Op::FormApply(n) => {
+                        out.push('.');
+                        out.push_str(n);
+                    }
                     Op::MakeForm { keys, .. } => {
                         out.push('{');
                         for (j, k) in keys.iter().enumerate() {
-                            if j > 0 { out.push(' '); }
-                            out.push(':'); out.push_str(k);
+                            if j > 0 {
+                                out.push(' ');
+                            }
+                            out.push(':');
+                            out.push_str(k);
                         }
                         out.push('}');
                     }
                     Op::MakeFun { params, body } => {
                         out.push('\\');
                         let ps: Vec<&str> = params.iter().map(|s| s.as_ref()).collect();
-                        if !ps.is_empty() { out.push_str(&ps.join(" ")); out.push(' '); }
+                        if !ps.is_empty() {
+                            out.push_str(&ps.join(" "));
+                            out.push(' ');
+                        }
                         out.push('[');
                         out.push_str(&ops_to_source_text(body));
                         out.push(']');
@@ -843,8 +962,8 @@ mod tests {
     // Lift → lower → compare Op sequences structurally.
     fn roundtrip_ops(src: &str) -> (Vec<Op>, Vec<Op>) {
         let original = parse(src).unwrap();
-        let graph    = lift(&original);
-        let lowered  = lower(&graph);
+        let graph = lift(&original);
+        let lowered = lower(&graph);
         (original, lowered)
     }
 
@@ -930,7 +1049,9 @@ mod tests {
         let (orig, low) = roundtrip_ops("[1 2 3 4] +/");
         assert_eq!(orig.len(), low.len());
         // Find the adverb in the lowered ops
-        let has_adverb = low.iter().any(|op| matches!(op, Op::Adverb(Adverb::Reduce)));
+        let has_adverb = low
+            .iter()
+            .any(|op| matches!(op, Op::Adverb(Adverb::Reduce)));
         assert!(has_adverb, "expected Adverb(Reduce) in lowered ops");
     }
 
@@ -1022,7 +1143,8 @@ mod tests {
     fn adverb_attached_to_word() {
         // "+/" → Word("+") node has adverb=Reduce
         let g = lift(&parse("[1 2 3] +/").unwrap());
-        let plus = g.nodes_in_order()
+        let plus = g
+            .nodes_in_order()
             .find(|n| matches!(&n.kind, NodeKind::Word(w) if w.as_ref() == "+"))
             .expect("missing + node");
         assert_eq!(plus.adverb, Some(Adverb::Reduce));
@@ -1032,7 +1154,8 @@ mod tests {
     fn predecessors_correct() {
         // "2 3 +" — + node has Lit(2) and Lit(3) as predecessors.
         let g = lift(&parse("2 3 +").unwrap());
-        let plus_id = g.nodes_in_order()
+        let plus_id = g
+            .nodes_in_order()
             .find(|n| matches!(&n.kind, NodeKind::Word(w) if w.as_ref() == "+"))
             .map(|n| n.id)
             .unwrap();
@@ -1044,7 +1167,8 @@ mod tests {
     fn successors_correct() {
         // "2 3 + 4 *" — + node has * as successor.
         let g = lift(&parse("2 3 + 4 *").unwrap());
-        let plus_id = g.nodes_in_order()
+        let plus_id = g
+            .nodes_in_order()
             .find(|n| matches!(&n.kind, NodeKind::Word(w) if w.as_ref() == "+"))
             .map(|n| n.id)
             .unwrap();
@@ -1062,9 +1186,12 @@ mod tests {
         let sorted = topo_sort(&g);
         assert_eq!(sorted.len(), 3);
         // Lit nodes must come before +
-        let plus_pos = sorted.iter().position(|&id| {
-            matches!(&g.node(id).unwrap().kind, NodeKind::Word(w) if w.as_ref() == "+")
-        }).unwrap();
+        let plus_pos = sorted
+            .iter()
+            .position(
+                |&id| matches!(&g.node(id).unwrap().kind, NodeKind::Word(w) if w.as_ref() == "+"),
+            )
+            .unwrap();
         for &id in &sorted[..plus_pos] {
             assert!(matches!(g.node(id).unwrap().kind, NodeKind::Literal(_)));
         }
@@ -1075,12 +1202,18 @@ mod tests {
         let g = lift(&parse("2 3 + 4 *").unwrap());
         let sorted = topo_sort(&g);
         assert_eq!(sorted.len(), 5);
-        let plus_pos = sorted.iter().position(|&id| {
-            matches!(&g.node(id).unwrap().kind, NodeKind::Word(w) if w.as_ref() == "+")
-        }).unwrap();
-        let mul_pos = sorted.iter().position(|&id| {
-            matches!(&g.node(id).unwrap().kind, NodeKind::Word(w) if w.as_ref() == "*")
-        }).unwrap();
+        let plus_pos = sorted
+            .iter()
+            .position(
+                |&id| matches!(&g.node(id).unwrap().kind, NodeKind::Word(w) if w.as_ref() == "+"),
+            )
+            .unwrap();
+        let mul_pos = sorted
+            .iter()
+            .position(
+                |&id| matches!(&g.node(id).unwrap().kind, NodeKind::Word(w) if w.as_ref() == "*"),
+            )
+            .unwrap();
         assert!(plus_pos < mul_pos, "+ must precede *");
     }
 
@@ -1089,10 +1222,10 @@ mod tests {
     #[test]
     fn roundtrip_eval_add() {
         let ops = parse("2 3 +").unwrap();
-        let g   = lift(&ops);
+        let g = lift(&ops);
         let low = lower(&g);
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&low);
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&low);
         assert_eq!(r1.len(), r2.len());
         assert!((real(&r1, 0) - real(&r2, 0)).abs() < 1e-9);
         assert!((real(&r1, 0) - 5.0).abs() < 1e-9);
@@ -1101,10 +1234,10 @@ mod tests {
     #[test]
     fn roundtrip_eval_chained() {
         let ops = parse("2 3 + 4 *").unwrap();
-        let g   = lift(&ops);
+        let g = lift(&ops);
         let low = lower(&g);
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&low);
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&low);
         assert!((real(&r1, 0) - real(&r2, 0)).abs() < 1e-9);
         assert!((real(&r1, 0) - 20.0).abs() < 1e-9);
     }
@@ -1113,8 +1246,8 @@ mod tests {
     fn roundtrip_eval_dup() {
         // 7 dup * → 49
         let ops = parse("7 dup *").unwrap();
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&lower(&lift(&ops)));
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&lower(&lift(&ops)));
         assert!((real(&r1, 0) - 49.0).abs() < 1e-9);
         assert!((real(&r1, 0) - real(&r2, 0)).abs() < 1e-9);
     }
@@ -1123,8 +1256,8 @@ mod tests {
     fn roundtrip_eval_swap() {
         // 3 5 swap - → 5 - 3 = 2
         let ops = parse("3 5 swap -").unwrap();
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&lower(&lift(&ops)));
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&lower(&lift(&ops)));
         assert!((real(&r1, 0) - real(&r2, 0)).abs() < 1e-9);
         assert!((real(&r1, 0) - 2.0).abs() < 1e-9);
     }
@@ -1133,8 +1266,8 @@ mod tests {
     fn roundtrip_eval_list_reduce() {
         // [1 2 3 4 5] +/ → 15
         let ops = parse("[1 2 3 4 5] +/").unwrap();
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&lower(&lift(&ops)));
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&lower(&lift(&ops)));
         assert!((real(&r1, 0) - 15.0).abs() < 1e-9);
         assert!((real(&r1, 0) - real(&r2, 0)).abs() < 1e-9);
     }
@@ -1143,8 +1276,8 @@ mod tests {
     fn roundtrip_eval_bind_use() {
         // 10 = x  x x * → 100
         let ops = parse("10 = x  x x *").unwrap();
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&lower(&lift(&ops)));
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&lower(&lift(&ops)));
         assert!((real(&r1, 0) - 100.0).abs() < 1e-9);
         assert!((real(&r1, 0) - real(&r2, 0)).abs() < 1e-9);
     }
@@ -1153,8 +1286,8 @@ mod tests {
     fn roundtrip_eval_lambda_call() {
         // \a b [a b *] = mul  3 7 `mul ! → 21
         let ops = parse("\\a b [a b *] = mul  3 7 `mul !").unwrap();
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&lower(&lift(&ops)));
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&lower(&lift(&ops)));
         assert!((real(&r1, 0) - 21.0).abs() < 1e-9);
         assert!((real(&r1, 0) - real(&r2, 0)).abs() < 1e-9);
     }
@@ -1163,8 +1296,8 @@ mod tests {
     fn roundtrip_eval_sym() {
         // 'hello — just pushes a symbol; both stacks should have the same Sym
         let ops = parse("'hello").unwrap();
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&lower(&lift(&ops)));
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&lower(&lift(&ops)));
         assert_eq!(r1.len(), r2.len());
         match (&r1[0], &r2[0]) {
             (stax_core::Value::Sym(a), stax_core::Value::Sym(b)) => assert_eq!(a, b),
@@ -1176,8 +1309,8 @@ mod tests {
     fn roundtrip_eval_stream_n() {
         // 1 5 to 5 N → [1 2 3 4 5]
         let ops = parse("1 5 to 5 N").unwrap();
-        let r1  = run_ops(&ops);
-        let r2  = run_ops(&lower(&lift(&ops)));
+        let r1 = run_ops(&ops);
+        let r2 = run_ops(&lower(&lift(&ops)));
         assert_eq!(r1.len(), r2.len());
     }
 
@@ -1200,7 +1333,8 @@ mod tests {
         let mut g = lift(&parse("2 3 +").unwrap());
         assert_eq!(g.edge_count(), 2);
         // Find the + node
-        let plus_id = g.nodes_in_order()
+        let plus_id = g
+            .nodes_in_order()
             .find(|n| matches!(&n.kind, NodeKind::Word(w) if w.as_ref() == "+"))
             .map(|n| n.id)
             .unwrap();
@@ -1215,9 +1349,15 @@ mod tests {
         let mut g = Graph::new();
         let src1 = g.add_node(NodeKind::Literal(Value::Real(1.0)), 0, 1);
         let src2 = g.add_node(NodeKind::Literal(Value::Real(2.0)), 0, 1);
-        let dst  = g.add_node(NodeKind::Word(Arc::from("+")), 2, 1);
-        let p1 = PortRef { node: src1, port: 0 };
-        let p2 = PortRef { node: src2, port: 0 };
+        let dst = g.add_node(NodeKind::Word(Arc::from("+")), 2, 1);
+        let p1 = PortRef {
+            node: src1,
+            port: 0,
+        };
+        let p2 = PortRef {
+            node: src2,
+            port: 0,
+        };
         let in0 = PortRef { node: dst, port: 0 };
         // First edge ok
         assert!(g.add_edge(p1, in0).is_some());
@@ -1240,9 +1380,16 @@ mod tests {
         let g = lift(&parse("2 3 +").unwrap());
         let src = g.lower_to_source();
         let reparsed = stax_parser::parse(&src);
-        assert!(reparsed.is_ok(), "lower_to_source produced unparseable text: {:?}", src);
+        assert!(
+            reparsed.is_ok(),
+            "lower_to_source produced unparseable text: {:?}",
+            src
+        );
         // Source should contain the tokens
-        assert!(src.contains('2') || src.contains("2"), "missing 2 in: {src}");
+        assert!(
+            src.contains('2') || src.contains("2"),
+            "missing 2 in: {src}"
+        );
         assert!(src.contains('+'), "missing + in: {src}");
     }
 }

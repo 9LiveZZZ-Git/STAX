@@ -14,16 +14,18 @@
 //!  11. Nested rank — map then inner reduce via lambda
 //!  12. Lambdas — map squaring, map with captured arg
 
+use stax_core::Value;
 use stax_eval::interp::Interp;
 use stax_parser::parse;
-use stax_core::Value;
 
 // ---- helpers ----------------------------------------------------------------
 
 fn try_eval(src: &str) -> Result<Vec<Value>, String> {
     let ops = parse(src).map_err(|e| format!("parse error in '{src}': {e}"))?;
     let mut interp = Interp::new();
-    interp.exec(&ops).map_err(|e| format!("exec error in '{src}': {e}"))?;
+    interp
+        .exec(&ops)
+        .map_err(|e| format!("exec error in '{src}': {e}"))?;
     Ok(interp.stack)
 }
 
@@ -35,15 +37,21 @@ fn eval(src: &str) -> Vec<Value> {
 /// Pop the top value and assert it is truthy.
 fn assert_truthy(src: &str) {
     let mut stack = eval(src);
-    let v = stack.pop().unwrap_or_else(|| panic!("empty stack after '{src}'"));
+    let v = stack
+        .pop()
+        .unwrap_or_else(|| panic!("empty stack after '{src}'"));
     assert!(v.is_truthy(), "expected truthy from '{src}', got: {v:?}");
 }
 
 /// Pop the top value and assert it equals the expected real.
 fn assert_top_real(src: &str, expected: f64) {
     let mut stack = eval(src);
-    let v = stack.pop().unwrap_or_else(|| panic!("empty stack after '{src}'"));
-    let r = v.as_real().unwrap_or_else(|| panic!("top of '{src}' is not real, got: {v:?}"));
+    let v = stack
+        .pop()
+        .unwrap_or_else(|| panic!("empty stack after '{src}'"));
+    let r = v
+        .as_real()
+        .unwrap_or_else(|| panic!("top of '{src}' is not real, got: {v:?}"));
     assert!(
         (r - expected).abs() < 1e-9,
         "'{src}': expected {expected}, got {r}"

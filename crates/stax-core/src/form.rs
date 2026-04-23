@@ -17,11 +17,17 @@ pub struct Form {
 
 impl Form {
     pub fn new() -> Self {
-        Self { bindings: BTreeMap::new(), parents: Vec::new() }
+        Self {
+            bindings: BTreeMap::new(),
+            parents: Vec::new(),
+        }
     }
 
     pub fn with_parent(parent: Arc<Form>) -> Self {
-        Self { bindings: BTreeMap::new(), parents: vec![parent] }
+        Self {
+            bindings: BTreeMap::new(),
+            parents: vec![parent],
+        }
     }
 
     pub fn get(&self, key: &str) -> Option<Value> {

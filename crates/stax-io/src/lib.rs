@@ -113,13 +113,18 @@ mod native {
                 .ok_or_else(|| anyhow!("MIDI input port {port_idx} not found"))?;
             let queue: Arc<Mutex<VecDeque<[u8; 3]>>> = Arc::new(Mutex::new(VecDeque::new()));
             let q2 = Arc::clone(&queue);
-            let conn = mi.connect(port, "stax-in", move |_stamp, msg, _| {
-                if msg.len() >= 3 {
-                    if let Ok(mut q) = q2.lock() {
-                        q.push_back([msg[0], msg[1], msg[2]]);
+            let conn = mi.connect(
+                port,
+                "stax-in",
+                move |_stamp, msg, _| {
+                    if msg.len() >= 3 {
+                        if let Ok(mut q) = q2.lock() {
+                            q.push_back([msg[0], msg[1], msg[2]]);
+                        }
                     }
-                }
-            }, ())?;
+                },
+                (),
+            )?;
             Ok(Self { _conn: conn, queue })
         }
 
@@ -137,7 +142,10 @@ mod native {
 
     /// Send a single OSC message to `host:port`.
     pub fn osc_send(host: &str, port: u16, addr: &str, args: Vec<OscType>) -> Result<()> {
-        let msg = OscPacket::Message(OscMessage { addr: addr.to_string(), args });
+        let msg = OscPacket::Message(OscMessage {
+            addr: addr.to_string(),
+            args,
+        });
         let bytes = encoder::encode(&msg)?;
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.send_to(&bytes, format!("{host}:{port}"))?;
@@ -153,7 +161,9 @@ mod stub {
     pub struct MidiOut;
 
     impl MidiOut {
-        pub fn ports() -> Vec<String> { vec![] }
+        pub fn ports() -> Vec<String> {
+            vec![]
+        }
         pub fn connect(_port_idx: usize) -> anyhow::Result<Self> {
             bail!("MIDI is not available in WASM (M6)")
         }
@@ -174,16 +184,27 @@ mod stub {
     pub struct MidiIn;
 
     impl MidiIn {
-        pub fn ports() -> Vec<String> { vec![] }
+        pub fn ports() -> Vec<String> {
+            vec![]
+        }
         pub fn connect(_port_idx: usize) -> anyhow::Result<Self> {
             bail!("MIDI in is not available in WASM (M6)")
         }
-        pub fn read(&self) -> Option<[u8; 3]> { None }
+        pub fn read(&self) -> Option<[u8; 3]> {
+            None
+        }
     }
 
-    pub enum OscType { Int(i32) }
+    pub enum OscType {
+        Int(i32),
+    }
 
-    pub fn osc_send(_host: &str, _port: u16, _addr: &str, _args: Vec<OscType>) -> anyhow::Result<()> {
+    pub fn osc_send(
+        _host: &str,
+        _port: u16,
+        _addr: &str,
+        _args: Vec<OscType>,
+    ) -> anyhow::Result<()> {
         bail!("OSC is not available in WASM")
     }
 }

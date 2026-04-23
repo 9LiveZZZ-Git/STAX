@@ -45,7 +45,10 @@ mod native {
             let sample_rate = supported.sample_rate().0 as f64;
             let config: cpal::StreamConfig = supported.into();
             Ok(Self {
-                host, device, config, sample_rate,
+                host,
+                device,
+                config,
+                sample_rate,
                 scope: Arc::new(Mutex::new(Vec::with_capacity(2048))),
             })
         }
@@ -133,10 +136,18 @@ mod web {
     pub struct Runtime;
 
     impl Runtime {
-        pub fn new() -> anyhow::Result<Self> { Ok(Self) }
-        pub fn sample_rate(&self) -> f64 { 48_000.0 }
-        pub fn host_name(&self) -> String { "web-audio (M6)".into() }
-        pub fn audio_stat(&self) -> (u32, usize) { (48_000, 128) }
+        pub fn new() -> anyhow::Result<Self> {
+            Ok(Self)
+        }
+        pub fn sample_rate(&self) -> f64 {
+            48_000.0
+        }
+        pub fn host_name(&self) -> String {
+            "web-audio (M6)".into()
+        }
+        pub fn audio_stat(&self) -> (u32, usize) {
+            (48_000, 128)
+        }
         pub fn scope_ring(&self) -> std::sync::Arc<std::sync::Mutex<Vec<f32>>> {
             std::sync::Arc::new(std::sync::Mutex::new(Vec::new()))
         }

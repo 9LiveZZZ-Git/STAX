@@ -1,7 +1,7 @@
 //! Graphviz DOT export + viewer window.
 
-use stax_graph::{Graph, PortKind};
 use crate::shell;
+use stax_graph::{Graph, PortKind};
 
 /// Render a `Graph` as a Graphviz DOT string.
 pub fn graph_to_dot(graph: &Graph) -> String {
@@ -18,14 +18,17 @@ pub fn graph_to_dot(graph: &Graph) -> String {
             "  n{} [label=\"{}\" fillcolor=\"{}\"",
             node.id.0, label, fill
         ));
-        if is_sink { out.push_str(" penwidth=2"); }
+        if is_sink {
+            out.push_str(" penwidth=2");
+        }
         out.push_str("];\n");
     }
 
     out.push('\n');
 
     for edge in graph.edges() {
-        let kind = graph.node(edge.src.node)
+        let kind = graph
+            .node(edge.src.node)
             .and_then(|n| n.outputs.get(edge.src.port as usize))
             .map(|p| p.kind)
             .unwrap_or(PortKind::Any);
@@ -34,7 +37,9 @@ pub fn graph_to_dot(graph: &Graph) -> String {
             "  n{} -> n{} [color=\"{}\"",
             edge.src.node.0, edge.dst.node.0, color
         ));
-        if dashed { out.push_str(" style=dashed"); }
+        if dashed {
+            out.push_str(" style=dashed");
+        }
         out.push_str("];\n");
     }
 
@@ -44,12 +49,12 @@ pub fn graph_to_dot(graph: &Graph) -> String {
 
 fn dot_edge_style(kind: &PortKind) -> (&'static str, bool) {
     match kind {
-        PortKind::Real   => ("#1a1a1a", false),
+        PortKind::Real => ("#1a1a1a", false),
         PortKind::Signal => ("#c94820", false),
         PortKind::Stream => ("#2d5a4a", true),
-        PortKind::Fun    => ("#6b4e8a", false),
-        PortKind::Form   => ("#8a6b2a", false),
-        PortKind::Any    => ("#6b6558", false),
+        PortKind::Fun => ("#6b4e8a", false),
+        PortKind::Form => ("#8a6b2a", false),
+        PortKind::Any => ("#6b6558", false),
         PortKind::Str | PortKind::Sym => ("#6b6558", false),
     }
 }
@@ -59,12 +64,7 @@ fn dot_edge_style(kind: &PortKind) -> (&'static str, bool) {
 /// Draw the floating DOT viewer window.
 /// `open` is set to false when the window is closed.
 /// `dot_src` holds the current DOT source (refreshed by the Refresh button).
-pub fn draw_dot_window(
-    ctx: &egui::Context,
-    open: &mut bool,
-    dot_src: &mut String,
-    graph: &Graph,
-) {
+pub fn draw_dot_window(ctx: &egui::Context, open: &mut bool, dot_src: &mut String, graph: &Graph) {
     let mut still_open = *open;
     egui::Window::new("DOT source")
         .id(egui::Id::new("dot_window"))
@@ -96,11 +96,18 @@ pub fn draw_dot_window(
                     let out = std::env::temp_dir().join("stax_graph.png");
                     if std::fs::write(&tmp, dot_src.as_bytes()).is_ok() {
                         let _ = std::process::Command::new("dot")
-                            .args(["-Tpng", tmp.to_str().unwrap_or(""), "-o", out.to_str().unwrap_or("")])
+                            .args([
+                                "-Tpng",
+                                tmp.to_str().unwrap_or(""),
+                                "-o",
+                                out.to_str().unwrap_or(""),
+                            ])
                             .output();
                         // Open in default viewer
                         #[cfg(target_os = "windows")]
-                        let _ = std::process::Command::new("cmd").args(["/c", "start", out.to_str().unwrap_or("")]).spawn();
+                        let _ = std::process::Command::new("cmd")
+                            .args(["/c", "start", out.to_str().unwrap_or("")])
+                            .spawn();
                         #[cfg(target_os = "macos")]
                         let _ = std::process::Command::new("open").arg(&out).spawn();
                         #[cfg(target_os = "linux")]

@@ -27,7 +27,8 @@ fn real(v: &Value) -> f64 {
 fn assert_real_eq(a: f64, b: f64, label: &str) {
     assert!(
         (a - b).abs() < 1e-9,
-        "{label}: expected {a} == {b}, diff = {}", (a - b).abs()
+        "{label}: expected {a} == {b}, diff = {}",
+        (a - b).abs()
     );
 }
 
@@ -46,9 +47,11 @@ fn roundtrip(src: &str) -> (Vec<Value>, Vec<Value>) {
 fn assert_roundtrip_reals(src: &str) {
     let (r1, r2) = roundtrip(src);
     assert_eq!(
-        r1.len(), r2.len(),
+        r1.len(),
+        r2.len(),
         "stack depth mismatch for `{src}`: orig={} lowered={}",
-        r1.len(), r2.len()
+        r1.len(),
+        r2.len()
     );
     for (i, (v1, v2)) in r1.iter().zip(r2.iter()).enumerate() {
         assert_real_eq(real(v1), real(v2), &format!("`{src}` stack[{i}]"));
@@ -67,7 +70,11 @@ fn roundtrip_form_construction() {
     let r1 = run(&orig);
     let r2 = run(&lowered);
 
-    assert_eq!(r1.len(), 1, "form construction should leave 1 value on stack");
+    assert_eq!(
+        r1.len(),
+        1,
+        "form construction should leave 1 value on stack"
+    );
     assert_eq!(r2.len(), 1);
 
     // Both should be Forms
@@ -124,8 +131,11 @@ fn roundtrip_nested_list() {
     // Both should be streams (lists are Streams in stax)
     match (&r1[0], &r2[0]) {
         (Value::Stream(_), Value::Stream(_)) => {}
-        _ => panic!("expected Stream for nested list, got {:?} / {:?}",
-            r1[0].kind(), r2[0].kind()),
+        _ => panic!(
+            "expected Stream for nested list, got {:?} / {:?}",
+            r1[0].kind(),
+            r2[0].kind()
+        ),
     }
 
     // Both should produce the same op count
@@ -230,15 +240,23 @@ fn roundtrip_quote_push() {
 
     // The last op in the lowered sequence should be Quote("double")
     let last = lowered.last().expect("non-empty ops");
-    assert!(matches!(last, Op::Quote(w) if w.as_ref() == "double"),
-        "last op should be Quote(double), got {last:?}");
+    assert!(
+        matches!(last, Op::Quote(w) if w.as_ref() == "double"),
+        "last op should be Quote(double), got {last:?}"
+    );
 
     // Eval: both should push a Fun onto the stack
     let r1 = run(&orig);
     let r2 = run(&lowered);
     assert_eq!(r1.len(), r2.len());
-    assert!(matches!(r1[0], Value::Fun(_)), "orig: expected Fun on stack");
-    assert!(matches!(r2[0], Value::Fun(_)), "lowered: expected Fun on stack");
+    assert!(
+        matches!(r1[0], Value::Fun(_)),
+        "orig: expected Fun on stack"
+    );
+    assert!(
+        matches!(r2[0], Value::Fun(_)),
+        "lowered: expected Fun on stack"
+    );
 
     // Also verify the call works correctly after round-trip
     let src_call = "\\a [a a +] = double  5 `double !";
@@ -273,7 +291,9 @@ fn roundtrip_reduce_adverb() {
     // Verify the adverb round-trips through the graph
     let orig = parse(src).expect("parse failed");
     let lowered = lower(&lift(&orig));
-    let has_adverb = lowered.iter().any(|op| matches!(op, Op::Adverb(Adverb::Reduce)));
+    let has_adverb = lowered
+        .iter()
+        .any(|op| matches!(op, Op::Adverb(Adverb::Reduce)));
     assert!(has_adverb, "Adverb::Reduce should survive lift/lower");
 }
 
@@ -291,7 +311,9 @@ fn roundtrip_scan_adverb() {
     let r2 = run(&lowered);
     assert_eq!(r1.len(), r2.len());
 
-    let has_scan = lowered.iter().any(|op| matches!(op, Op::Adverb(Adverb::Scan)));
+    let has_scan = lowered
+        .iter()
+        .any(|op| matches!(op, Op::Adverb(Adverb::Scan)));
     assert!(has_scan, "Adverb::Scan should survive lift/lower");
 }
 
@@ -413,8 +435,14 @@ fn roundtrip_drop_over() {
     let r2 = run(&lowered);
     assert_eq!(r1.len(), r2.len(), "drop should leave 1 stream on stack");
     // Both should be streams
-    assert!(matches!(r1[0], Value::Stream(_)), "drop result should be a Stream");
-    assert!(matches!(r2[0], Value::Stream(_)), "lowered drop result should be a Stream");
+    assert!(
+        matches!(r1[0], Value::Stream(_)),
+        "drop result should be a Stream"
+    );
+    assert!(
+        matches!(r2[0], Value::Stream(_)),
+        "lowered drop result should be a Stream"
+    );
 
     // Verify `over` (stack duplication) independently: `2 3 over` → [2, 3, 2]
     let src2 = "2 3 over";
@@ -476,12 +504,14 @@ fn graph_edges_data_flow() {
     let src = "2 3 + 4 *";
     let g = lift(&parse(src).expect("parse failed"));
 
-    let plus_id = g.nodes_in_order()
+    let plus_id = g
+        .nodes_in_order()
         .find(|n| matches!(&n.kind, NodeKind::Word(w) if w.as_ref() == "+"))
         .map(|n| n.id)
         .unwrap();
 
-    let mul_id = g.nodes_in_order()
+    let mul_id = g
+        .nodes_in_order()
         .find(|n| matches!(&n.kind, NodeKind::Word(w) if w.as_ref() == "*"))
         .map(|n| n.id)
         .unwrap();
@@ -521,9 +551,11 @@ fn op_identity_all_programs() {
         let orig = parse(src).expect("parse failed");
         let lowered = lower(&lift(&orig));
         assert_eq!(
-            orig.len(), lowered.len(),
+            orig.len(),
+            lowered.len(),
             "op count mismatch for `{src}`: {} vs {}",
-            orig.len(), lowered.len()
+            orig.len(),
+            lowered.len()
         );
     }
 }

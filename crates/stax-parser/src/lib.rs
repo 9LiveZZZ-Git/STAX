@@ -25,7 +25,12 @@ struct Parser {
 
 impl Parser {
     fn new(src: &str) -> Self {
-        Self { chars: src.chars().collect(), pos: 0, line: 1, col: 1 }
+        Self {
+            chars: src.chars().collect(),
+            pos: 0,
+            line: 1,
+            col: 1,
+        }
     }
 
     fn peek(&self) -> Option<char> {
@@ -39,20 +44,33 @@ impl Parser {
     fn advance(&mut self) -> Option<char> {
         let c = self.chars.get(self.pos).copied()?;
         self.pos += 1;
-        if c == '\n' { self.line += 1; self.col = 1; } else { self.col += 1; }
+        if c == '\n' {
+            self.line += 1;
+            self.col = 1;
+        } else {
+            self.col += 1;
+        }
         Some(c)
     }
 
     fn parse_err(&self, msg: impl Into<String>) -> Error {
-        Error::Parse { line: self.line, col: self.col, msg: msg.into() }
+        Error::Parse {
+            line: self.line,
+            col: self.col,
+            msg: msg.into(),
+        }
     }
 
     fn skip_ws(&mut self) {
         loop {
             match self.peek() {
-                Some(' ') | Some('\t') | Some('\r') | Some('\n') => { self.advance(); }
+                Some(' ') | Some('\t') | Some('\r') | Some('\n') => {
+                    self.advance();
+                }
                 Some(';') => {
-                    while matches!(self.peek(), Some(c) if c != '\n') { self.advance(); }
+                    while matches!(self.peek(), Some(c) if c != '\n') {
+                        self.advance();
+                    }
                 }
                 _ => break,
             }
@@ -63,7 +81,9 @@ impl Parser {
         let mut ops = Vec::new();
         loop {
             self.skip_ws();
-            if self.peek().is_none() { break; }
+            if self.peek().is_none() {
+                break;
+            }
             let more = self.parse_one()?;
             ops.extend(more);
         }
@@ -81,7 +101,8 @@ impl Parser {
 
             // #[ signal list
             Some('#') if self.peek2() == Some('[') => {
-                self.advance(); self.advance();
+                self.advance();
+                self.advance();
                 let body = self.parse_until(']')?;
                 let mut ops = vec![Op::ListMark];
                 ops.extend(body);
@@ -139,12 +160,18 @@ impl Parser {
                     Some('(') => {
                         self.advance();
                         let names = self.parse_name_list(')')?;
-                        Ok(vec![Op::BindMany { names: Arc::from(names), list_mode: false }])
+                        Ok(vec![Op::BindMany {
+                            names: Arc::from(names),
+                            list_mode: false,
+                        }])
                     }
                     Some('[') => {
                         self.advance();
                         let names = self.parse_name_list(']')?;
-                        Ok(vec![Op::BindMany { names: Arc::from(names), list_mode: true }])
+                        Ok(vec![Op::BindMany {
+                            names: Arc::from(names),
+                            list_mode: true,
+                        }])
                     }
                     _ => {
                         let name = self.read_word();
@@ -180,9 +207,7 @@ impl Parser {
             }
 
             // Regular word (or adverb)
-            Some(c) if is_word_start(c) || is_word_only(c) => {
-                Ok(self.parse_word_or_adverb())
-            }
+            Some(c) if is_word_start(c) || is_word_only(c) => Ok(self.parse_word_or_adverb()),
 
             // Skip unknown
             _ => {
@@ -204,7 +229,10 @@ impl Parser {
                     Some('t') => s.push('\t'),
                     Some('"') => s.push('"'),
                     Some('\\') => s.push('\\'),
-                    Some(c) => { s.push('\\'); s.push(c); }
+                    Some(c) => {
+                        s.push('\\');
+                        s.push(c);
+                    }
                     None => return Err(self.parse_err("unterminated escape")),
                 },
                 Some(c) => s.push(c),
@@ -219,7 +247,10 @@ impl Parser {
             self.skip_ws();
             match self.peek() {
                 None => return Err(self.parse_err(format!("expected '{close}'"))),
-                Some(c) if c == close => { self.advance(); break; }
+                Some(c) if c == close => {
+                    self.advance();
+                    break;
+                }
                 _ => ops.extend(self.parse_one()?),
             }
         }
@@ -236,7 +267,10 @@ impl Parser {
             self.skip_ws();
             match self.peek() {
                 None => return Err(self.parse_err("unclosed '{'")),
-                Some('}') => { self.advance(); break; }
+                Some('}') => {
+                    self.advance();
+                    break;
+                }
                 Some(':') => {
                     self.advance();
                     let key = self.read_word();
@@ -265,7 +299,10 @@ impl Parser {
             self.skip_ws();
             match self.peek() {
                 None => return Err(self.parse_err("unclosed name list")),
-                Some(c) if c == close => { self.advance(); break; }
+                Some(c) if c == close => {
+                    self.advance();
+                    break;
+                }
                 _ => {
                     let name = self.read_word();
                     if !name.is_empty() {
@@ -334,7 +371,9 @@ impl Parser {
             }
         }
 
-        let base: f64 = s.parse().map_err(|_| self.parse_err(format!("bad number: {s}")))?;
+        let base: f64 = s
+            .parse()
+            .map_err(|_| self.parse_err(format!("bad number: {s}")))?;
 
         // Infix fraction: base/denom (no whitespace)
         if self.peek() == Some('/') && self.peek2().is_some_and(|c| c.is_ascii_digit()) {
@@ -364,12 +403,12 @@ impl Parser {
         }
 
         let mult = match suffix.as_str() {
-            "k"  => 1_000.0_f64,
-            "M"  => 1_000_000.0,
-            "m"  => 1e-3,
-            "u"  => 1e-6,
+            "k" => 1_000.0_f64,
+            "M" => 1_000_000.0,
+            "m" => 1e-3,
+            "u" => 1e-6,
             "pi" => std::f64::consts::PI,
-            "h"  => std::f64::consts::TAU,
+            "h" => std::f64::consts::TAU,
             "sr" => 44_100.0, // placeholder; real SR is runtime
             _ => {
                 self.pos = suffix_start;
@@ -390,7 +429,9 @@ impl Parser {
 
     fn parse_word_or_adverb(&mut self) -> Vec<Op> {
         let mut word = self.read_word();
-        if word.is_empty() { return vec![]; }
+        if word.is_empty() {
+            return vec![];
+        }
 
         // `<=` and `>=`: `=` is excluded from is_word_char (it triggers bind syntax),
         // so `<` and `>` stop there. Peek-ahead and consume the `=` if present.
@@ -433,12 +474,26 @@ fn is_word_only(c: char) -> bool {
 }
 
 fn is_word_char(c: char) -> bool {
-    !matches!(c,
-        ' ' | '\t' | '\n' | '\r'
-        | ';' | '"'
-        | '[' | ']' | '{' | '}' | '(' | ')'
-        | '\'' | '`' | ',' | '='
-        | '!' | ':' | '#'
+    !matches!(
+        c,
+        ' ' | '\t'
+            | '\n'
+            | '\r'
+            | ';'
+            | '"'
+            | '['
+            | ']'
+            | '{'
+            | '}'
+            | '('
+            | ')'
+            | '\''
+            | '`'
+            | ','
+            | '='
+            | '!'
+            | ':'
+            | '#'
     )
 }
 
@@ -446,8 +501,8 @@ fn is_word_char(c: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use stax_core::Error;
     use super::*;
+    use stax_core::Error;
 
     #[test]
     fn tokens_and_numbers() {
@@ -492,7 +547,9 @@ mod tests {
     fn lambda() {
         let ops = parse("\\a b [a b +]").unwrap();
         assert_eq!(ops.len(), 1);
-        assert!(matches!(&ops[0], Op::MakeFun { params, body } if params.len() == 2 && body.len() == 3));
+        assert!(
+            matches!(&ops[0], Op::MakeFun { params, body } if params.len() == 2 && body.len() == 3)
+        );
     }
 
     #[test]
@@ -536,13 +593,19 @@ mod tests {
         // Fixed by peeking after `<`/`>` in parse_word_or_adverb.
         let lte = parse("3 3 <=").unwrap();
         assert_eq!(lte.len(), 3);
-        assert!(matches!(&lte[2], Op::Word(w) if w.as_ref() == "<="),
-            "expected Word(\"<=\"), got {:?}", lte[2]);
+        assert!(
+            matches!(&lte[2], Op::Word(w) if w.as_ref() == "<="),
+            "expected Word(\"<=\"), got {:?}",
+            lte[2]
+        );
 
         let gte = parse("5 3 >=").unwrap();
         assert_eq!(gte.len(), 3);
-        assert!(matches!(&gte[2], Op::Word(w) if w.as_ref() == ">="),
-            "expected Word(\">=\"), got {:?}", gte[2]);
+        assert!(
+            matches!(&gte[2], Op::Word(w) if w.as_ref() == ">="),
+            "expected Word(\">=\"), got {:?}",
+            gte[2]
+        );
 
         // Ensure plain `<` and `>` still parse correctly (no accidental merge).
         let lt = parse("3 5 <").unwrap();

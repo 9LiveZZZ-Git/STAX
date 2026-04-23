@@ -97,7 +97,9 @@ fn harness_debug_view_with_state() {
     let mut app = StaxApp::new_for_test();
     app.source = "440 sinosc play".to_owned();
     app.recompile();
-    for i in 1..=5 { app.exec_repl(&format!("{i}")); }
+    for i in 1..=5 {
+        app.exec_repl(&format!("{i}"));
+    }
     app.view = View::Debug;
     let mut harness = Harness::new(move |ctx| {
         app.render_frame(ctx);
@@ -110,8 +112,16 @@ fn harness_debug_view_with_state() {
 /// Renders multiple frames cycling through all four views — tests tab consistency.
 #[test]
 fn harness_all_views_cycle_no_panic() {
-    let views = [View::Graph, View::Text, View::FnPort, View::Debug,
-                 View::Graph, View::Text, View::FnPort, View::Debug];
+    let views = [
+        View::Graph,
+        View::Text,
+        View::FnPort,
+        View::Debug,
+        View::Graph,
+        View::Text,
+        View::FnPort,
+        View::Debug,
+    ];
     let mut idx = 0usize;
     let mut app = StaxApp::new_for_test();
     app.exec_repl("2 3 +"); // ensure there's something in REPL + stack
@@ -131,7 +141,10 @@ fn harness_synth_graph_view() {
     let mut app = StaxApp::new_for_test();
     app.source = "440 sinosc play".to_owned();
     app.recompile();
-    assert!(app.parse_error.is_none(), "440 sinosc play should parse cleanly");
+    assert!(
+        app.parse_error.is_none(),
+        "440 sinosc play should parse cleanly"
+    );
     let mut harness = Harness::new(move |ctx| {
         app.render_frame(ctx);
     });
@@ -226,8 +239,14 @@ fn harness_timebar_with_snapshots() {
 #[test]
 fn smoke_default_source() {
     let app = StaxApp::new_for_test();
-    assert!(app.parse_error.is_none(), "default source should parse cleanly");
-    assert!(app.graph.node_count() > 0, "default source should produce nodes");
+    assert!(
+        app.parse_error.is_none(),
+        "default source should parse cleanly"
+    );
+    assert!(
+        app.graph.node_count() > 0,
+        "default source should produce nodes"
+    );
 }
 
 /// View field starts on Graph.
@@ -243,11 +262,16 @@ fn synth_cross_view_consistency() {
     let mut app = StaxApp::new_for_test();
     app.source = "440 sinosc play".to_owned();
     app.recompile();
-    assert!(app.parse_error.is_none(), "synth source should parse cleanly");
+    assert!(
+        app.parse_error.is_none(),
+        "synth source should parse cleanly"
+    );
 
     // Graph view: node labels contain "sinosc" and "play"
     app.view = View::Graph;
-    let node_labels: Vec<String> = app.graph.nodes_in_order()
+    let node_labels: Vec<String> = app
+        .graph
+        .nodes_in_order()
         .map(|n| n.label().to_string())
         .collect();
     assert!(
@@ -261,14 +285,26 @@ fn synth_cross_view_consistency() {
 
     // Text view: source is unchanged
     app.view = View::Text;
-    assert!(app.source.contains("sinosc"), "sinosc not in source after view switch");
-    assert!(app.source.contains("play"),   "play not in source after view switch");
-    assert!(app.source.contains("440"),    "440 not in source after view switch");
+    assert!(
+        app.source.contains("sinosc"),
+        "sinosc not in source after view switch"
+    );
+    assert!(
+        app.source.contains("play"),
+        "play not in source after view switch"
+    );
+    assert!(
+        app.source.contains("440"),
+        "440 not in source after view switch"
+    );
 
     // Both views share the same IR
     assert!(app.ops.len() > 0, "ops should be non-empty after compile");
-    assert_eq!(app.graph.node_count(), node_labels.len(),
-        "graph node count inconsistent between views");
+    assert_eq!(
+        app.graph.node_count(),
+        node_labels.len(),
+        "graph node count inconsistent between views"
+    );
 }
 
 /// Modular synth: "440 sinosc 0.5 * lpf play" produces more nodes than "440 sinosc play".
@@ -282,8 +318,10 @@ fn modular_synth_graph_depth() {
     app_modular.source = "440 sinosc 0.5 * 800 lpf play".to_owned();
     app_modular.recompile();
 
-    assert!(app_modular.parse_error.is_none(),
-        "modular synth source should parse cleanly");
+    assert!(
+        app_modular.parse_error.is_none(),
+        "modular synth source should parse cleanly"
+    );
     assert!(
         app_modular.graph.node_count() > app_simple.graph.node_count(),
         "modular synth should have more nodes than simple sine"
@@ -339,8 +377,11 @@ fn source_edit_recompiles() {
     app.source = "2 3 +".to_owned();
     app.recompile();
     assert!(app.parse_error.is_none());
-    assert_ne!(app.graph.node_count(), original_count,
-        "graph should change after source edit");
+    assert_ne!(
+        app.graph.node_count(),
+        original_count,
+        "graph should change after source edit"
+    );
 }
 
 /// Bad source sets parse_error without panic.
@@ -362,7 +403,10 @@ fn cursor_stack_lazy() {
     app.compute_cursor_stack();
     let cached_line = app.cursor_stack_line;
     app.compute_cursor_stack();
-    assert_eq!(app.cursor_stack_line, cached_line, "should not re-evaluate same line");
+    assert_eq!(
+        app.cursor_stack_line, cached_line,
+        "should not re-evaluate same line"
+    );
 }
 
 /// compute_cursor_stack updates when cursor_line changes.
@@ -377,7 +421,11 @@ fn cursor_stack_updates_on_line_change() {
     app.cursor_line = 2;
     app.compute_cursor_stack();
     let stack2 = app.cursor_stack.clone();
-    assert_ne!(stack1.len(), stack2.len(), "stack should grow after second line");
+    assert_ne!(
+        stack1.len(),
+        stack2.len(),
+        "stack should grow after second line"
+    );
 }
 
 /// Auto-layout assigns positions for all nodes in the graph.
@@ -387,7 +435,8 @@ fn auto_layout_covers_all_nodes() {
     for node in app.graph.nodes_in_order() {
         assert!(
             app.node_positions.contains_key(&node.id),
-            "node {:?} has no position", node.id
+            "node {:?} has no position",
+            node.id
         );
     }
 }
@@ -405,8 +454,11 @@ fn canvas_default_transform() {
 fn fit_canvas_to_nodes_no_panic() {
     let mut app = StaxApp::new_for_test();
     app.fit_canvas_to_nodes();
-    assert!(app.canvas_zoom >= 0.2 && app.canvas_zoom <= 2.0,
-        "zoom out of range: {}", app.canvas_zoom);
+    assert!(
+        app.canvas_zoom >= 0.2 && app.canvas_zoom <= 2.0,
+        "zoom out of range: {}",
+        app.canvas_zoom
+    );
 }
 
 /// Reveal router: GraphNode switches view and selects the node.
@@ -449,8 +501,11 @@ fn travel_snapshot_ring_cap() {
     for i in 0..=1001 {
         app.exec_repl(&format!("{i}"));
     }
-    assert!(app.travel_snapshots.len() <= 1000,
-        "ring buffer should cap at 1000, got {}", app.travel_snapshots.len());
+    assert!(
+        app.travel_snapshots.len() <= 1000,
+        "ring buffer should cap at 1000, got {}",
+        app.travel_snapshots.len()
+    );
 }
 
 /// travel_step stays in bounds after many execs.
@@ -460,8 +515,12 @@ fn travel_step_in_bounds() {
     for i in 0..5 {
         app.exec_repl(&format!("{i}"));
     }
-    assert!(app.travel_step < app.travel_snapshots.len(),
-        "travel_step {} out of bounds (len {})", app.travel_step, app.travel_snapshots.len());
+    assert!(
+        app.travel_step < app.travel_snapshots.len(),
+        "travel_step {} out of bounds (len {})",
+        app.travel_step,
+        app.travel_snapshots.len()
+    );
 }
 
 /// Switching views does not lose source or graph state.
@@ -473,16 +532,25 @@ fn view_switch_preserves_state() {
     let node_count_before = app.graph.node_count();
 
     app.view = View::Text;
-    assert_eq!(app.graph.node_count(), node_count_before,
-        "node count changed on view switch to Text");
+    assert_eq!(
+        app.graph.node_count(),
+        node_count_before,
+        "node count changed on view switch to Text"
+    );
 
     app.view = View::FnPort;
-    assert_eq!(app.graph.node_count(), node_count_before,
-        "node count changed on view switch to FnPort");
+    assert_eq!(
+        app.graph.node_count(),
+        node_count_before,
+        "node count changed on view switch to FnPort"
+    );
 
     app.view = View::Graph;
-    assert_eq!(app.graph.node_count(), node_count_before,
-        "node count changed on view switch back to Graph");
+    assert_eq!(
+        app.graph.node_count(),
+        node_count_before,
+        "node count changed on view switch back to Graph"
+    );
 }
 
 // ── Milestone C tests ─────────────────────────────────────────────────────────
@@ -496,7 +564,9 @@ fn fnport_sub_graph_builds_for_makefun_node() {
     app.recompile();
 
     // Find the MakeFun node.
-    let makefun_id = app.graph.nodes_in_order()
+    let makefun_id = app
+        .graph
+        .nodes_in_order()
         .find(|n| matches!(n.kind, stax_graph::NodeKind::MakeFun { .. }))
         .map(|n| n.id);
 
@@ -512,7 +582,10 @@ fn fnport_sub_graph_builds_for_makefun_node() {
                 app.fnport.subgraph = Some(sub);
             }
         }
-        assert!(app.fnport.subgraph.is_some(), "subgraph not built for MakeFun node");
+        assert!(
+            app.fnport.subgraph.is_some(),
+            "subgraph not built for MakeFun node"
+        );
         let sub = app.fnport.subgraph.as_ref().unwrap();
         assert!(sub.node_count() > 0, "subgraph has no nodes");
     }
@@ -529,8 +602,15 @@ fn file_new_clears_source() {
 
     app.file_new();
     assert!(app.source.is_empty(), "source not cleared after file_new");
-    assert!(app.current_file.is_none(), "current_file not cleared after file_new");
-    assert_eq!(app.graph.node_count(), 0, "graph not cleared after file_new");
+    assert!(
+        app.current_file.is_none(),
+        "current_file not cleared after file_new"
+    );
+    assert_eq!(
+        app.graph.node_count(),
+        0,
+        "graph not cleared after file_new"
+    );
 }
 
 /// C4: file_save writes source to the path, file_open_path reads it back.
@@ -540,7 +620,11 @@ fn file_save_writes_content() {
     let tmp = std::env::temp_dir().join("stax_test_save.stax");
     app.source = "1 2 +".to_owned();
     app.file_save_as(tmp.clone());
-    assert_eq!(app.current_file.as_ref(), Some(&tmp), "current_file not updated after save_as");
+    assert_eq!(
+        app.current_file.as_ref(),
+        Some(&tmp),
+        "current_file not updated after save_as"
+    );
 
     // Read back with a new app
     let mut app2 = StaxApp::new_for_test();
@@ -555,8 +639,8 @@ fn file_save_writes_content() {
 /// C5: rank and adverb overrides survive a CSV serialization round-trip.
 #[test]
 fn rank_overrides_survive_serialization_round_trip() {
-    use stax_graph::NodeId;
     use stax_core::Adverb;
+    use stax_graph::NodeId;
 
     let mut app = StaxApp::new_for_test();
     app.rank_overrides.insert((NodeId(1), 0), 2u8);
@@ -565,20 +649,26 @@ fn rank_overrides_survive_serialization_round_trip() {
     app.adverb_overrides.insert(NodeId(4), None);
 
     // Serialize to CSV strings (same logic as save())
-    let rank_str: String = app.rank_overrides.iter()
+    let rank_str: String = app
+        .rank_overrides
+        .iter()
         .map(|((nid, port), rank)| format!("{}:{}:{}", nid.0, port, rank))
-        .collect::<Vec<_>>().join(",");
-    let adv_str: String = app.adverb_overrides.iter()
+        .collect::<Vec<_>>()
+        .join(",");
+    let adv_str: String = app
+        .adverb_overrides
+        .iter()
         .map(|(nid, adv)| {
             let code: u8 = match adv {
                 None => 0,
-                Some(Adverb::Reduce)   => 1,
-                Some(Adverb::Scan)     => 2,
+                Some(Adverb::Reduce) => 1,
+                Some(Adverb::Scan) => 2,
                 Some(Adverb::Pairwise) => 3,
             };
             format!("{}:{}", nid.0, code)
         })
-        .collect::<Vec<_>>().join(",");
+        .collect::<Vec<_>>()
+        .join(",");
 
     // Deserialize (same logic as new() load from storage)
     let mut app2 = StaxApp::new_for_test();
@@ -612,7 +702,10 @@ fn rank_overrides_survive_serialization_round_trip() {
     // Verify
     assert_eq!(app2.rank_overrides.get(&(NodeId(1), 0)), Some(&2u8));
     assert_eq!(app2.rank_overrides.get(&(NodeId(3), 1)), Some(&1u8));
-    assert_eq!(app2.adverb_overrides.get(&NodeId(2)), Some(&Some(Adverb::Scan)));
+    assert_eq!(
+        app2.adverb_overrides.get(&NodeId(2)),
+        Some(&Some(Adverb::Scan))
+    );
     assert_eq!(app2.adverb_overrides.get(&NodeId(4)), Some(&None));
 }
 
@@ -622,7 +715,10 @@ fn rank_overrides_survive_serialization_round_trip() {
 #[test]
 fn d1_selected_nodes_starts_empty() {
     let app = StaxApp::new_for_test();
-    assert!(app.selected_nodes.is_empty(), "selected_nodes should start empty");
+    assert!(
+        app.selected_nodes.is_empty(),
+        "selected_nodes should start empty"
+    );
     assert!(app.marquee_start.is_none());
     assert!(app.marquee_rect.is_none());
 }
@@ -686,8 +782,14 @@ fn d6_graph_to_dot_contains_digraph() {
     app.source = "440 sinosc play".to_owned();
     app.recompile();
     let dot = stax_editor::dot::graph_to_dot(&app.graph);
-    assert!(dot.contains("digraph"), "DOT output should start with digraph");
-    assert!(dot.contains("->") || dot.contains("n0"), "DOT should contain nodes or edges");
+    assert!(
+        dot.contains("digraph"),
+        "DOT output should start with digraph"
+    );
+    assert!(
+        dot.contains("->") || dot.contains("n0"),
+        "DOT should contain nodes or edges"
+    );
 }
 
 /// D6: graph_to_dot on empty graph produces valid stub.
@@ -702,22 +804,28 @@ fn d6_graph_to_dot_empty_graph() {
         a
     };
     let dot = stax_editor::dot::graph_to_dot(&empty_app.graph);
-    assert!(dot.contains("digraph"), "empty-graph DOT should still be valid");
+    assert!(
+        dot.contains("digraph"),
+        "empty-graph DOT should still be valid"
+    );
 }
 
 /// D7: FnPortState nav_stack starts empty.
 #[test]
 fn d7_fnport_nav_stack_starts_empty() {
     let app = StaxApp::new_for_test();
-    assert!(app.fnport.nav_stack.is_empty(), "nav_stack should start empty");
+    assert!(
+        app.fnport.nav_stack.is_empty(),
+        "nav_stack should start empty"
+    );
 }
 
 /// D7: nav_stack push/pop preserves state.
 #[test]
 fn d7_fnport_nav_stack_push_pop() {
+    use egui::Vec2;
     use stax_graph::NodeId;
     use std::collections::HashMap;
-    use egui::Vec2;
 
     let mut app = StaxApp::new_for_test();
 
@@ -725,13 +833,9 @@ fn d7_fnport_nav_stack_push_pop() {
     let parent_nid = NodeId(42);
     let parent_pan = Vec2::new(10.0, 20.0);
     let parent_zoom = 1.5f32;
-    app.fnport.nav_stack.push((
-        parent_nid,
-        None,
-        HashMap::new(),
-        parent_pan,
-        parent_zoom,
-    ));
+    app.fnport
+        .nav_stack
+        .push((parent_nid, None, HashMap::new(), parent_pan, parent_zoom));
     assert_eq!(app.fnport.nav_stack.len(), 1);
 
     // Pop it back

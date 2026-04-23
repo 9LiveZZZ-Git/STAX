@@ -1,5 +1,5 @@
-use egui::{Painter, Rect, Stroke, StrokeKind, pos2};
 use crate::shell;
+use egui::{pos2, Painter, Rect, Stroke, StrokeKind};
 
 /// Draw a waveform display in `rect`.
 /// `samples`: PCM f32 slice (can be empty — draws flat line).
@@ -42,7 +42,12 @@ pub fn draw_scope(painter: &Painter, rect: Rect, samples: &[f32]) {
     }
 
     // Border
-    painter.rect_stroke(rect, 0.0, Stroke::new(0.5, shell::RULE), StrokeKind::Outside);
+    painter.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(0.5, shell::RULE),
+        StrokeKind::Outside,
+    );
 }
 
 /// Draw a level meter (horizontal bar) in `rect`.
@@ -60,7 +65,12 @@ pub fn draw_meter(painter: &Painter, rect: Rect, level: f32) {
     }
 
     // Border
-    painter.rect_stroke(rect, 0.0, Stroke::new(0.5, shell::RULE), StrokeKind::Outside);
+    painter.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(0.5, shell::RULE),
+        StrokeKind::Outside,
+    );
 }
 
 /// Compute RMS of a sample slice. Returns 0.0 for an empty slice.

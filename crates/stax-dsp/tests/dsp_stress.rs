@@ -89,7 +89,7 @@ fn sawosc_monotone_per_cycle_then_reset() {
     let buf = fill_n(&mut inst, 48_000);
 
     let samples_per_cycle = SR / 100.0; // 480
-    // Find one complete cycle by looking for the reset point
+                                        // Find one complete cycle by looking for the reset point
     let half_cycle = (samples_per_cycle / 2.0) as usize;
     let full_cycle = samples_per_cycle as usize;
 
@@ -142,11 +142,13 @@ fn square_wave_50pct_duty() {
     // Both halves should be within 5% of 50%
     assert!(
         (plus_frac - 0.5).abs() < 0.05,
-        "expected ~50% near +1.0, got {:.1}%", plus_frac * 100.0
+        "expected ~50% near +1.0, got {:.1}%",
+        plus_frac * 100.0
     );
     assert!(
         (minus_frac - 0.5).abs() < 0.05,
-        "expected ~50% near -1.0, got {:.1}%", minus_frac * 100.0
+        "expected ~50% near -1.0, got {:.1}%",
+        minus_frac * 100.0
     );
 }
 
@@ -208,7 +210,10 @@ fn pink_noise_bounded() {
 #[test]
 fn ar_envelope_shape() {
     // attack=0.01s, release=0.1s, total duration = 0.11s = 5280 samples
-    let env = ArEnv { attack_secs: 0.01, release_secs: 0.1 };
+    let env = ArEnv {
+        attack_secs: 0.01,
+        release_secs: 0.1,
+    };
     let mut inst = env.instantiate(SR);
     let total_samples = ((0.01 + 0.1) * SR as f32) as usize + 100;
     let buf = fill_n(&mut inst, total_samples);
@@ -217,7 +222,10 @@ fn ar_envelope_shape() {
     let release_end = ((0.01 + 0.1) * SR as f32) as usize;
 
     // Peak should be near 1.0 at the attack/release transition
-    let peak = buf[..release_end].iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let peak = buf[..release_end]
+        .iter()
+        .cloned()
+        .fold(f32::NEG_INFINITY, f32::max);
     assert!(
         peak > 0.99,
         "AR envelope peak should be near 1.0, got {peak:.4}"
@@ -248,7 +256,10 @@ fn lpf2_passes_low_attenuates_high() {
     // Measure gain through the filter for a 440 Hz sine
     {
         let src = Arc::new(SinOsc::new(440.0));
-        let lpf = Lpf2Signal { input: src as Arc<dyn Signal>, cutoff_hz: cutoff };
+        let lpf = Lpf2Signal {
+            input: src as Arc<dyn Signal>,
+            cutoff_hz: cutoff,
+        };
         let mut inst = lpf.instantiate(sr);
         // Let the filter settle then measure
         let pre_settle = 2000usize;
@@ -266,7 +277,10 @@ fn lpf2_passes_low_attenuates_high() {
     // Measure gain for a 10 kHz sine
     {
         let src = Arc::new(SinOsc::new(10_000.0));
-        let lpf = Lpf2Signal { input: src as Arc<dyn Signal>, cutoff_hz: cutoff };
+        let lpf = Lpf2Signal {
+            input: src as Arc<dyn Signal>,
+            cutoff_hz: cutoff,
+        };
         let mut inst = lpf.instantiate(sr);
         let pre_settle = 2000usize;
         let meas_samples = 4800usize;
@@ -289,7 +303,10 @@ fn hpf2_passes_high_attenuates_low() {
     // 440 Hz should be attenuated
     {
         let src = Arc::new(SinOsc::new(440.0));
-        let hpf = Hpf2Signal { input: src as Arc<dyn Signal>, cutoff_hz: cutoff };
+        let hpf = Hpf2Signal {
+            input: src as Arc<dyn Signal>,
+            cutoff_hz: cutoff,
+        };
         let mut inst = hpf.instantiate(SR);
         let pre_settle = 2000;
         let meas_samples = 4800;
@@ -304,7 +321,10 @@ fn hpf2_passes_high_attenuates_low() {
     // 10kHz should pass
     {
         let src = Arc::new(SinOsc::new(10_000.0));
-        let hpf = Hpf2Signal { input: src as Arc<dyn Signal>, cutoff_hz: cutoff };
+        let hpf = Hpf2Signal {
+            input: src as Arc<dyn Signal>,
+            cutoff_hz: cutoff,
+        };
         let mut inst = hpf.instantiate(SR);
         let pre_settle = 2000;
         let meas_samples = 4800;
@@ -327,7 +347,12 @@ fn svf_lp_passband_stopband() {
     // 440 Hz: should pass
     {
         let src = Arc::new(SinOsc::new(440.0));
-        let filt = SvfFilter { input: src as Arc<dyn Signal>, freq_hz: cutoff, q, mode: 0 };
+        let filt = SvfFilter {
+            input: src as Arc<dyn Signal>,
+            freq_hz: cutoff,
+            q,
+            mode: 0,
+        };
         let mut inst = filt.instantiate(SR);
         let buf = fill_n(&mut inst, 6800);
         let gain = rms(&buf[2000..]);
@@ -340,7 +365,12 @@ fn svf_lp_passband_stopband() {
     // 10kHz: should be strongly attenuated
     {
         let src = Arc::new(SinOsc::new(10_000.0));
-        let filt = SvfFilter { input: src as Arc<dyn Signal>, freq_hz: cutoff, q, mode: 0 };
+        let filt = SvfFilter {
+            input: src as Arc<dyn Signal>,
+            freq_hz: cutoff,
+            q,
+            mode: 0,
+        };
         let mut inst = filt.instantiate(SR);
         let buf = fill_n(&mut inst, 6800);
         let gain = rms(&buf[2000..]);
@@ -403,7 +433,8 @@ fn fdn_reverb_tail_and_decay() {
     // Direct signal: sample 0 should be 0.3 (0.7 wet = 0 at start + 0.3*1.0 dry)
     assert!(
         buf2[0].abs() > 0.2,
-        "FDN reverb impulse direct signal should be visible at sample 0, got {:.4}", buf2[0]
+        "FDN reverb impulse direct signal should be visible at sample 0, got {:.4}",
+        buf2[0]
     );
 
     // Check that there is energy somewhere in the reverb tail region
@@ -449,7 +480,7 @@ fn compressor_attenuates_above_threshold() {
     // Quiet signal (amplitude 0.05, well below threshold): should mostly pass
     let src_quiet = Arc::new(
         // Scale: use WaveShaperSignal with hardclip amount=0.05 to scale a sine
-        SinOsc::new(440.0)
+        SinOsc::new(440.0),
     );
     // Manually create a scaled sine by using Mix2 with gain_a=0.05, gain_b=0
     let scaled = Arc::new(Mix2Signal {
@@ -486,9 +517,9 @@ fn goertzel_detects_target_frequency() {
     let freq = 440.0f64;
 
     // Generate a 440Hz sine
-    let samples: Vec<f32> = (0..n).map(|i| {
-        (std::f64::consts::TAU * freq * i as f64 / SR).sin() as f32
-    }).collect();
+    let samples: Vec<f32> = (0..n)
+        .map(|i| (std::f64::consts::TAU * freq * i as f64 / SR).sin() as f32)
+        .collect();
 
     let mag_at_440 = goertzel_magnitude(&samples, 440.0, SR);
     // Use a far-off frequency (4400 Hz, 10x the fundamental) to test rejection.
@@ -519,9 +550,9 @@ fn goertzel_detects_target_frequency() {
 #[test]
 fn goertzel_spectral_resolution_documented() {
     let n = 4096usize;
-    let samples: Vec<f32> = (0..n).map(|i| {
-        (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() as f32
-    }).collect();
+    let samples: Vec<f32> = (0..n)
+        .map(|i| (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() as f32)
+        .collect();
 
     let mag_440 = goertzel_magnitude(&samples, 440.0, SR);
     let mag_441 = goertzel_magnitude(&samples, 441.0, SR);
@@ -548,7 +579,11 @@ fn mdct_imdct_roundtrip() {
         .collect();
 
     let coeffs = mdct(&signal);
-    assert_eq!(coeffs.len(), n_in / 2, "MDCT should produce N/2 coefficients");
+    assert_eq!(
+        coeffs.len(),
+        n_in / 2,
+        "MDCT should produce N/2 coefficients"
+    );
 
     let reconstructed = imdct(&coeffs);
     assert_eq!(reconstructed.len(), n_in, "IMDCT should produce N samples");
@@ -560,10 +595,7 @@ fn mdct_imdct_roundtrip() {
     let rms_in = rms(&signal);
     let rms_out = rms(&reconstructed);
 
-    assert!(
-        rms_out > 0.0,
-        "IMDCT should produce non-zero output"
-    );
+    assert!(rms_out > 0.0, "IMDCT should produce non-zero output");
     // The ratios should be within 2x of each other (same energy scale)
     let ratio = rms_out / rms_in.max(1e-10);
     assert!(
@@ -631,11 +663,13 @@ fn hann_window_shape() {
     assert_eq!(w.len(), n);
     assert!(
         w[0].abs() < 1e-5,
-        "Hann window first sample should be 0, got {}", w[0]
+        "Hann window first sample should be 0, got {}",
+        w[0]
     );
     assert!(
         w[n - 1].abs() < 1e-3,
-        "Hann window last sample should be near 0, got {}", w[n - 1]
+        "Hann window last sample should be near 0, got {}",
+        w[n - 1]
     );
     // Middle sample (symmetric peak)
     let mid = w[n / 2];
@@ -648,7 +682,8 @@ fn hann_window_shape() {
         assert!(
             w[i] >= w[i - 1],
             "Hann window should increase in first half at i={i}: w[i]={} w[i-1]={}",
-            w[i], w[i - 1]
+            w[i],
+            w[i - 1]
         );
     }
 }
@@ -665,11 +700,13 @@ fn kaiser_window_edges_near_zero() {
     // With high beta, the edges are very close to 0
     assert!(
         w[0] < 0.01,
-        "Kaiser window first sample with beta=8 should be near 0, got {}", w[0]
+        "Kaiser window first sample with beta=8 should be near 0, got {}",
+        w[0]
     );
     assert!(
         w[n - 1] < 0.01,
-        "Kaiser window last sample with beta=8 should be near 0, got {}", w[n - 1]
+        "Kaiser window last sample with beta=8 should be near 0, got {}",
+        w[n - 1]
     );
     // Center should be 1.0
     let mid = w[n / 2];
@@ -698,7 +735,8 @@ fn gaussian_window_bell_shape() {
     let center_idx = (n - 1) / 2;
     assert!(
         w[center_idx] > 0.95,
-        "Gaussian window center should be near 1.0, got {}", w[center_idx]
+        "Gaussian window center should be near 1.0, got {}",
+        w[center_idx]
     );
 
     // Edges should be smaller than center
@@ -717,7 +755,9 @@ fn gaussian_window_bell_shape() {
         assert!(
             diff < 0.01,
             "Gaussian window should be symmetric: w[{i}]={} w[{}]={} diff={diff:.4}",
-            w[i], n - 1 - i, w[n - 1 - i]
+            w[i],
+            n - 1 - i,
+            w[n - 1 - i]
         );
     }
 
@@ -745,8 +785,8 @@ fn cqt_440hz_peak_at_correct_bin() {
         .collect();
 
     let bins_per_octave = 12usize;
-    let f_min = 220.0f64;  // A3 — so A4 (440Hz) is exactly bin 12
-    let n_bins = 24usize;  // 2 octaves: 220Hz to 880Hz
+    let f_min = 220.0f64; // A3 — so A4 (440Hz) is exactly bin 12
+    let n_bins = 24usize; // 2 octaves: 220Hz to 880Hz
 
     let mags = cqt_magnitudes(&samples, SR, bins_per_octave, f_min, n_bins);
 
@@ -754,9 +794,13 @@ fn cqt_440hz_peak_at_correct_bin() {
 
     // 440Hz = f_min * 2^(12/12) → bin 12 exactly
     let target_bin = (bins_per_octave as f64 * (440.0_f64 / f_min).log2()).round() as usize;
-    assert_eq!(target_bin, 12, "sanity: 440Hz should be bin 12 with f_min=220 bpo=12");
+    assert_eq!(
+        target_bin, 12,
+        "sanity: 440Hz should be bin 12 with f_min=220 bpo=12"
+    );
 
-    let peak_bin = mags.iter()
+    let peak_bin = mags
+        .iter()
         .enumerate()
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
         .map(|(i, _)| i)
@@ -824,10 +868,7 @@ fn triosc_symmetric_and_bounded() {
     // Triangle wave peaks at exactly 1.0 and -1.0
     let peak = buf.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     let trough = buf.iter().cloned().fold(f32::INFINITY, f32::min);
-    assert!(
-        peak > 0.99,
-        "TriOsc peak should be near 1.0, got {peak}"
-    );
+    assert!(peak > 0.99, "TriOsc peak should be near 1.0, got {peak}");
     assert!(
         trough < -0.99,
         "TriOsc trough should be near -1.0, got {trough}"
@@ -846,9 +887,13 @@ fn triosc_symmetric_and_bounded() {
 #[test]
 fn lorenz_attractor_bounded() {
     let lorenz_x = LorenzSignal {
-        sigma: 10.0, rho: 28.0, beta: 2.667,
+        sigma: 10.0,
+        rho: 28.0,
+        beta: 2.667,
         dt: 0.005,
-        x0: 1.0, y0: 0.0, z0: 0.0,
+        x0: 1.0,
+        y0: 0.0,
+        z0: 0.0,
         output: 0,
     };
     let mut inst = lorenz_x.instantiate(SR);
@@ -863,7 +908,10 @@ fn lorenz_attractor_bounded() {
     );
     // Should show variation (chaotic)
     let s = std_dev(&buf);
-    assert!(s > 1.0, "Lorenz should be chaotic (std_dev>1.0), got {s:.4}");
+    assert!(
+        s > 1.0,
+        "Lorenz should be chaotic (std_dev>1.0), got {s:.4}"
+    );
 }
 
 // ── Bonus Test 23: VecSignal plays back correctly ────────────────────────────
@@ -886,7 +934,8 @@ fn vec_signal_exact_playback() {
     for i in 16..20 {
         assert!(
             buf[i].abs() < 1e-6,
-            "VecSignal should output 0 past end, got {} at {i}", buf[i]
+            "VecSignal should output 0 past end, got {} at {i}",
+            buf[i]
         );
     }
 }
@@ -902,7 +951,10 @@ fn fir_lp_filter_frequency_response() {
     // 440Hz: should pass (gain near 1 after settling)
     {
         let src = Arc::new(SinOsc::new(440.0));
-        let filt = FirFilterSignal { input: src as Arc<dyn Signal>, coeffs: coeffs.clone() };
+        let filt = FirFilterSignal {
+            input: src as Arc<dyn Signal>,
+            coeffs: coeffs.clone(),
+        };
         let mut inst = filt.instantiate(SR);
         let buf = fill_n(&mut inst, 6_000);
         let gain = rms(&buf[n_taps..]);
@@ -915,7 +967,10 @@ fn fir_lp_filter_frequency_response() {
     // 8kHz: should be strongly attenuated
     {
         let src = Arc::new(SinOsc::new(8_000.0));
-        let filt = FirFilterSignal { input: src as Arc<dyn Signal>, coeffs: coeffs.clone() };
+        let filt = FirFilterSignal {
+            input: src as Arc<dyn Signal>,
+            coeffs: coeffs.clone(),
+        };
         let mut inst = filt.instantiate(SR);
         let buf = fill_n(&mut inst, 6_000);
         let gain = rms(&buf[n_taps..]);

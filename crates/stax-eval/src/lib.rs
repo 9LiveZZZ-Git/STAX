@@ -8,5 +8,5 @@ pub mod env;
 pub mod interp;
 
 pub use env::Env;
-pub use interp::Interp;
 pub use interp::query_audio_stat;
+pub use interp::Interp;
