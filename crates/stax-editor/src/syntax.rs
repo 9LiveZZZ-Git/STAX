@@ -247,11 +247,16 @@ pub fn highlight(src: &str) -> Vec<Span> {
     spans
 }
 
-/// Build an egui LayoutJob for highlighted source text.
+/// Build an egui LayoutJob for highlighted source text at the default 13px size.
 pub fn layout_job(src: &str) -> egui::text::LayoutJob {
+    layout_job_sized(src, 13.0)
+}
+
+/// Build an egui LayoutJob for highlighted source text at a configurable font size.
+pub fn layout_job_sized(src: &str, font_size: f32) -> egui::text::LayoutJob {
     let spans = highlight(src);
     let mut job = egui::text::LayoutJob::default();
-    let mono = egui::FontId::new(13.0, egui::FontFamily::Monospace);
+    let mono = egui::FontId::new(font_size, egui::FontFamily::Monospace);
 
     for span in &spans {
         let text = &src[span.start..span.end];

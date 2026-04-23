@@ -67,6 +67,49 @@ fn extract_unknown_word(err: &str) -> Option<&str> {
     err.split_whitespace().last()
 }
 
+// ── Error position extraction (B1) ────────────────────────────────────────
+
+/// Try to parse a `(line, col)` pair out of a parser error message.
+/// Handles patterns like "1:5", "line 1", "at line 1 col 5".
+pub fn extract_error_pos(msg: &str) -> Option<(usize, usize)> {
+    // Try "N:M" pattern
+    for part in msg.split_whitespace() {
+        let mut it = part.split(':');
+        if let (Some(a), Some(b)) = (it.next(), it.next()) {
+            if let (Ok(l), Ok(c)) = (a.trim().parse::<usize>(), b.trim().parse::<usize>()) {
+                if l > 0 { return Some((l, c.max(1))); }
+            }
+        }
+    }
+    // Try "line N"
+    let lower = msg.to_lowercase();
+    if let Some(pos) = lower.find("line ") {
+        let rest = &lower[pos + 5..];
+        let n: usize = rest.split(|c: char| !c.is_ascii_digit())
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        if n > 0 { return Some((n, 1)); }
+    }
+    None
+}
+
+// ── Squiggle drawing (B1) ─────────────────────────────────────────────────
+
+fn draw_squiggle(painter: &egui::Painter, start: egui::Pos2, width: f32, color: egui::Color32) {
+    let mut x = start.x;
+    let mut up = true;
+    let mut pts = Vec::new();
+    while x < start.x + width {
+        pts.push(egui::pos2(x, start.y + if up { -2.0 } else { 2.0 }));
+        x += 3.0;
+        up = !up;
+    }
+    for w in pts.windows(2) {
+        painter.line_segment([w[0], w[1]], egui::Stroke::new(1.0, color));
+    }
+}
+
 impl StaxApp {
     // ── Left panel: files + outline + diagnostics ──────────────────────────
 
@@ -157,7 +200,12 @@ impl StaxApp {
 
     pub(crate) fn draw_text_editor(&mut self, ui: &mut egui::Ui) {
         const GUTTER_W: f32 = 32.0;
+        const LIVE_COL_W: f32 = 14.0;  // B3 dot column
         const ROW_H: f32 = 18.0;
+        const CHAR_W: f32 = 7.8;
+
+        // B3: compute live dots if dirty
+        self.compute_line_evals();
 
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, shell::PAPER);
@@ -196,27 +244,33 @@ impl StaxApp {
             );
         }
 
-        // ── Code area (gutter + editor) ────────────────────────────────────
+        // ── Code area (gutter + live-col + editor) ────────────────────────
         let full_code_rect = Rect::from_min_size(
             pos2(rect.min.x, rect.min.y + bc_h),
             vec2(rect.width(), rect.height() - bc_h),
         );
 
-        // Gutter rect (left 32px)
+        // Gutter rect (left GUTTER_W px — line numbers)
         let gutter_rect = Rect::from_min_size(
             full_code_rect.min,
             vec2(GUTTER_W, full_code_rect.height()),
         );
+        // B3: live-col rect (LIVE_COL_W px right of gutter)
+        let live_col_rect = Rect::from_min_size(
+            pos2(gutter_rect.max.x, full_code_rect.min.y),
+            vec2(LIVE_COL_W, full_code_rect.height()),
+        );
         // Editor rect (remainder)
         let editor_rect = Rect::from_min_max(
-            pos2(full_code_rect.min.x + GUTTER_W + 1.0, full_code_rect.min.y),
+            pos2(live_col_rect.max.x + 1.0, full_code_rect.min.y),
             full_code_rect.max,
         );
 
         // Draw gutter background and right border
         ui.painter().rect_filled(gutter_rect, 0.0, shell::PAPER_2);
+        ui.painter().rect_filled(live_col_rect, 0.0, shell::PAPER_2);
         ui.painter().line_segment(
-            [gutter_rect.right_top(), gutter_rect.right_bottom()],
+            [live_col_rect.right_top(), live_col_rect.right_bottom()],
             Stroke::new(1.0, shell::RULE),
         );
 
@@ -235,6 +289,9 @@ impl StaxApp {
 
         let te_id = Id::new("stax_text_editor");
 
+        // B4: capture selection outside closure so we have scroll_y when rendering chip
+        let mut sel_chip_info: Option<(usize, String)> = None; // (start_line_0indexed, selected_text)
+
         let scroll_out = egui::ScrollArea::both()
             .id_salt("code_scroll")
             .show(&mut code_ui, |ui| {
@@ -250,15 +307,13 @@ impl StaxApp {
 
                 let out = te.show(ui);
 
-                // Track cursor line from cursor_range byte offset
+                // Track cursor line + col from cursor_range byte offset
                 if let Some(cursor_range) = out.cursor_range {
                     let byte_offset = cursor_range.primary.ccursor.index;
-                    let line = self.source[..byte_offset.min(self.source.len())]
-                        .chars()
-                        .filter(|&c| c == '\n')
-                        .count()
-                        + 1;
-                    self.cursor_line = line;
+                    let src_up_to = &self.source[..byte_offset.min(self.source.len())];
+                    self.cursor_line = src_up_to.chars().filter(|&c| c == '\n').count() + 1;
+                    // B5: cursor column = chars since last newline + 1
+                    self.cursor_col = src_up_to.lines().last().map(|l| l.len() + 1).unwrap_or(1);
                 }
 
                 // On any edit: recompile and track modification
@@ -270,19 +325,59 @@ impl StaxApp {
                     }
                 }
 
+                // B4: capture selection info for chip rendering after scroll area
+                if let Some(cr) = out.cursor_range {
+                    let s_idx = cr.primary.ccursor.index.min(cr.secondary.ccursor.index);
+                    let e_idx = cr.primary.ccursor.index.max(cr.secondary.ccursor.index);
+                    if e_idx > s_idx {
+                        let text = self.source.get(s_idx..e_idx).unwrap_or("").to_owned();
+                        let start_line = self.source[..s_idx.min(self.source.len())]
+                            .chars().filter(|&c| c == '\n').count();
+                        sel_chip_info = Some((start_line, text));
+                    }
+                }
+
                 out.response
             });
 
         let scroll_y = scroll_out.state.offset.y;
         let te_resp = scroll_out.inner;
 
-        // ── Gutter line numbers ────────────────────────────────────────────
+        // B4: render selection chip now that we have scroll_y
+        if let Some((start_line, ref sel_text)) = sel_chip_info {
+            let chip_y = editor_rect.min.y + start_line as f32 * ROW_H - scroll_y - 26.0;
+            if chip_y > editor_rect.min.y - 30.0 && chip_y < editor_rect.max.y {
+                let chip_pos = egui::pos2(editor_rect.min.x + 40.0, chip_y);
+                let sel_text_owned = sel_text.clone();
+                egui::Area::new(egui::Id::new("sel_chip"))
+                    .fixed_pos(chip_pos)
+                    .order(egui::Order::Foreground)
+                    .show(ui.ctx(), |ui| {
+                        egui::Frame::new()
+                            .fill(shell::SURFACE)
+                            .stroke(egui::Stroke::new(1.0, shell::RULE))
+                            .inner_margin(egui::Margin::same(4))
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    if ui.small_button("eval").clicked() {
+                                        self.exec_repl(&sel_text_owned);
+                                    }
+                                    if ui.small_button("→ graph").clicked() {
+                                        self.view = crate::app::View::Graph;
+                                    }
+                                });
+                            });
+                    });
+            }
+        }
+
+        // ── Gutter line numbers + live dots + squiggles ───────────────────
         let total_lines = self.source.lines().count().max(1);
         let visible_start = (scroll_y / ROW_H) as usize;
         let visible_end = visible_start + (gutter_rect.height() / ROW_H) as usize + 2;
         let visible_end = visible_end.min(total_lines);
 
-        let gutter_y = gutter_rect.min.y;
+        let gutter_y  = gutter_rect.min.y;
         let scroll_frac = scroll_y.rem_euclid(ROW_H);
 
         for line in (visible_start + 1)..=(visible_end + 1) {
@@ -290,7 +385,7 @@ impl StaxApp {
             let row_top = gutter_y + (line - 1 - visible_start) as f32 * ROW_H - scroll_frac;
             let row_rect = Rect::from_min_size(
                 pos2(gutter_rect.min.x, row_top),
-                vec2(GUTTER_W, ROW_H),
+                vec2(GUTTER_W + LIVE_COL_W, ROW_H),
             );
 
             // Active line highlight: SURFACE fill + WARM left accent
@@ -310,9 +405,34 @@ impl StaxApp {
                 egui::FontId::new(10.0, egui::FontFamily::Monospace),
                 shell::INK_3,
             );
+
+            // B3: live dot in live-col column
+            let dot_x = live_col_rect.center().x;
+            if let Some(val_opt) = self.line_eval_cache.get(line - 1) {
+                let (dot, color) = match val_opt {
+                    Some(_) => ("●", shell::WARM),
+                    None    => ("·", shell::INK_3),
+                };
+                ui.painter().text(
+                    pos2(dot_x, row_top + ROW_H * 0.5),
+                    egui::Align2::CENTER_CENTER,
+                    dot,
+                    egui::FontId::new(10.0, egui::FontFamily::Monospace),
+                    color,
+                );
+            }
+
+            // B1: error squiggle on the error line
+            if let Some((err_line, err_col)) = self.parse_error_pos {
+                if line == err_line {
+                    let sq_x = editor_rect.min.x + (err_col.saturating_sub(1)) as f32 * CHAR_W;
+                    let sq_w = CHAR_W * 6.0; // approximate token width
+                    draw_squiggle(&ui.painter(), egui::pos2(sq_x, row_top + ROW_H - 2.0), sq_w, shell::ERR);
+                }
+            }
         }
 
-        // ── Error underline ────────────────────────────────────────────────
+        // ── Error underline at bottom of editor ────────────────────────────
         if self.parse_error.is_some() {
             let r = te_resp.rect;
             ui.painter().line_segment(
@@ -445,20 +565,20 @@ impl StaxApp {
                 let history = self.repl_history.clone();
                 for entry in &history {
                     use crate::app::ReplKind::*;
-                    let (prefix, color) = match entry.kind {
-                        Input  => ("›  ", shell::INK),
-                        Output => ("   ", shell::INK_2),
-                        Ok     => ("   ", shell::COOL),
-                        Err    => ("   ", shell::WARM),
-                    };
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);
-                        ui.label(
-                            egui::RichText::new(format!("{}{}", prefix, entry.text))
-                                .color(color)
-                                .size(12.0)
-                                .monospace(),
-                        );
+                        match entry.kind {
+                            Input => {
+                                // B6: syntax-highlighted REPL input
+                                ui.label(egui::RichText::new("›  ").color(shell::INK).size(12.0).monospace());
+                                let mut job = crate::syntax::layout_job_sized(&entry.text, 12.0);
+                                job.wrap.max_width = f32::INFINITY;
+                                ui.label(egui::widget_text::WidgetText::LayoutJob(job));
+                            }
+                            Output => { ui.label(egui::RichText::new(format!("   {}", entry.text)).color(shell::INK_2).size(12.0).monospace()); }
+                            Ok     => { ui.label(egui::RichText::new(format!("   {}", entry.text)).color(shell::COOL).size(12.0).monospace()); }
+                            Err    => { ui.label(egui::RichText::new(format!("   {}", entry.text)).color(shell::WARM).size(12.0).monospace()); }
+                        }
                     });
                 }
             });

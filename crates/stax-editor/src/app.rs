@@ -76,8 +76,16 @@ pub struct StaxApp {
 
     // Text view state
     pub cursor_line: usize,
+    pub cursor_col: usize,
     pub cursor_stack: Vec<stax_core::Value>,
     pub cursor_stack_line: usize,
+
+    // Error position for squiggles (B1)
+    pub parse_error_pos: Option<(usize, usize)>,  // (line, col) 1-indexed
+
+    // Live column evaluation cache (B3)
+    pub line_eval_cache: Vec<Option<stax_core::Value>>,
+    pub line_eval_dirty: bool,
 
     // Fn-port view state
     pub fnport: FnPortState,
@@ -157,8 +165,12 @@ impl StaxApp {
             lib_drag_word: None,
             lib_drag_ghost: None,
             cursor_line: 1,
+            cursor_col: 1,
             cursor_stack: Vec::new(),
             cursor_stack_line: 0,
+            parse_error_pos: None,
+            line_eval_cache: Vec::new(),
+            line_eval_dirty: true,
             fnport: FnPortState::default(),
             rank_overrides: HashMap::new(),
             adverb_overrides: HashMap::new(),
@@ -214,8 +226,12 @@ impl StaxApp {
             lib_drag_word: None,
             lib_drag_ghost: None,
             cursor_line: 1,
+            cursor_col: 1,
             cursor_stack: Vec::new(),
             cursor_stack_line: 0,
+            parse_error_pos: None,
+            line_eval_cache: Vec::new(),
+            line_eval_dirty: true,
             fnport: crate::fnport::FnPortState::default(),
             rank_overrides: HashMap::new(),
             adverb_overrides: HashMap::new(),
@@ -251,11 +267,12 @@ impl StaxApp {
     // ── Recompile source → ops → graph → layout ────────────────────────────
 
     pub fn recompile(&mut self) {
+        self.line_eval_dirty = true;
         match stax_parser::parse(&self.source) {
             Ok(ops) => {
                 self.parse_error = None;
+                self.parse_error_pos = None;
                 self.graph = stax_graph::lift(&ops);
-                // Preserve existing user positions; add new ones via auto-layout
                 let new_positions = crate::graph::auto_layout(&self.graph);
                 for (id, pos) in new_positions {
                     self.node_positions.entry(id).or_insert(pos);
@@ -263,9 +280,35 @@ impl StaxApp {
                 self.ops = ops;
             }
             Err(e) => {
-                self.parse_error = Some(e.to_string());
+                let msg = e.to_string();
+                self.parse_error_pos = crate::text::extract_error_pos(&msg);
+                self.parse_error = Some(msg);
             }
         }
+    }
+
+    // ── B3: compute per-line stack tops ────────────────────────────────────
+
+    pub fn compute_line_evals(&mut self) {
+        if !self.line_eval_dirty { return; }
+        self.line_eval_dirty = false;
+        let lines: Vec<&str> = self.source.lines().collect();
+        if lines.len() > 300 {
+            self.line_eval_cache = vec![None; lines.len()];
+            return;
+        }
+        let mut results = Vec::with_capacity(lines.len());
+        let mut partial = String::new();
+        for line in &lines {
+            partial.push_str(line);
+            partial.push('\n');
+            let top = stax_parser::parse(&partial).ok().and_then(|ops| {
+                let mut interp = stax_eval::Interp::new();
+                interp.exec(&ops).ok().and_then(|_| interp.stack.last().cloned())
+            });
+            results.push(top);
+        }
+        self.line_eval_cache = results;
     }
 
     // ── Persist graph mutation back to source ──────────────────────────────
@@ -831,6 +874,17 @@ impl StaxApp {
                     .size(11.0)
                     .monospace(),
             );
+
+            // B5: cursor position + stats in text view
+            if matches!(self.view, View::Text) {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(14.0);
+                    ui.label(egui::RichText::new(
+                        format!("L{}:{} · utf-8 · {} nodes",
+                            self.cursor_line, self.cursor_col, self.graph.node_count())
+                    ).color(shell::INK_3).size(10.0).monospace());
+                });
+            }
         });
     }
 
@@ -869,20 +923,19 @@ impl StaxApp {
             .show(&mut child, |ui| {
                 let history = self.repl_history.clone();
                 for entry in &history {
-                    let (prefix, color) = match entry.kind {
-                        ReplKind::Input  => ("›  ", shell::INK),
-                        ReplKind::Output => ("   ", shell::INK_2),
-                        ReplKind::Ok     => ("   ", shell::COOL),
-                        ReplKind::Err    => ("   ", shell::WARM),
-                    };
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);
-                        ui.label(
-                            egui::RichText::new(format!("{}{}", prefix, entry.text))
-                                .color(color)
-                                .size(12.0)
-                                .monospace(),
-                        );
+                        match entry.kind {
+                            ReplKind::Input => {
+                                ui.label(egui::RichText::new("›  ").color(shell::INK).size(12.0).monospace());
+                                let mut job = crate::syntax::layout_job_sized(&entry.text, 12.0);
+                                job.wrap.max_width = f32::INFINITY;
+                                ui.label(egui::widget_text::WidgetText::LayoutJob(job));
+                            }
+                            ReplKind::Output => { ui.label(egui::RichText::new(format!("   {}", entry.text)).color(shell::INK_2).size(12.0).monospace()); }
+                            ReplKind::Ok     => { ui.label(egui::RichText::new(format!("   {}", entry.text)).color(shell::COOL).size(12.0).monospace()); }
+                            ReplKind::Err    => { ui.label(egui::RichText::new(format!("   {}", entry.text)).color(shell::WARM).size(12.0).monospace()); }
+                        }
                     });
                 }
             });
