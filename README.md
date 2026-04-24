@@ -1,9 +1,12 @@
 # stax
 
 [![CI](https://github.com/9LiveZZZ-Git/STAX/actions/workflows/ci.yml/badge.svg)](https://github.com/9LiveZZZ-Git/STAX/actions/workflows/ci.yml)
+[![Deploy](https://github.com/9LiveZZZ-Git/STAX/actions/workflows/pages.yml/badge.svg)](https://9LiveZZZ-Git.github.io/STAX/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
 [![SAPF Compatibility](https://img.shields.io/badge/SAPF-365%2F365-brightgreen)](https://github.com/lfnoise/sapf)
 [![Rust](https://img.shields.io/badge/rust-2021%20edition-orange.svg)](https://www.rust-lang.org/)
+
+**[Try the editor in your browser →](https://9LiveZZZ-Git.github.io/STAX/)**
 
 A Rust reimplementation of **SAPF** (Sound As Pure Form) — James McCartney's stack-based concatenative audio programming language — with a working node-based visual editor, GPU operators, and JIT-compiled signal paths on the roadmap.
 
@@ -50,17 +53,21 @@ stax is a faithful Rust port of the SAPF language (passes all 365 of McCartney's
 | **M3** | Audio runtime (cpal), MIDI/OSC, full DSP suite, Tier 1/2 extended DSP | ✅ |
 | **M4** | Graph IR + text↔graph round-trip (`stax-graph`) | ✅ |
 | **M5** | egui editor: graph view, text view, embedded REPL | ✅ |
-| **M6** | WASM / AudioWorklet browser target | 🔲 |
+| **M6** | WASM browser target — editor runs in browser via GitHub Pages; AudioWorklet audio bridge | ⚡ |
 | **M7** | Arrangement, clips, automation | 🔲 |
 | **M8** | VST/AU plugin target | 🔲 |
 | **M9** | GPU operators | 🔲 |
 | **M10** | JIT-compiled signal paths | 🔲 |
 
-**Current test count: 489 passing** (365 SAPF integration + 94 interpreter + 36 graph + 6 DSP + others).
+**Current test count: 546 passing** (365 SAPF integration + 94 interpreter + 72 parser stress + 36 graph + 6 DSP + others).
 
 ---
 
 ## Quickstart
+
+**Browser (no install):** open **[https://9LiveZZZ-Git.github.io/STAX/](https://9LiveZZZ-Git.github.io/STAX/)** — the full graph + text editor runs as a compiled WASM app. Audio output requires the native build for now (AudioWorklet bridge is M6 in-progress).
+
+**Native:**
 
 ```sh
 # Verify workspace builds

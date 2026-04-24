@@ -400,6 +400,11 @@ impl StaxApp {
                 self.parse_error_pos = None;
                 self.graph = stax_graph::lift(&ops);
                 let new_positions = crate::graph::auto_layout(&self.graph);
+                // Remove positions for nodes that no longer exist in the new graph
+                let current_ids: std::collections::HashSet<stax_graph::NodeId> =
+                    self.graph.nodes_in_order().map(|n| n.id).collect();
+                self.node_positions.retain(|id, _| current_ids.contains(id));
+                // Insert positions for nodes not yet in the map (preserves user-dragged positions)
                 for (id, pos) in new_positions {
                     self.node_positions.entry(id).or_insert(pos);
                 }
@@ -456,6 +461,7 @@ impl StaxApp {
         self.source = String::new();
         self.current_file = None;
         self.source_modified = false;
+        self.node_positions.clear();
         self.recompile();
     }
 
@@ -475,6 +481,7 @@ impl StaxApp {
             }
             self.current_file = Some(path);
             self.source_modified = false;
+            self.node_positions.clear();
             self.recompile();
         }
     }
@@ -1738,6 +1745,36 @@ impl StaxApp {
             self.canvas_pan += response.drag_delta() / self.canvas_zoom;
         }
 
+        // Arrow key pan / Shift+arrow zoom (canvas must be focused/hovered)
+        if response.hovered() || response.has_focus() {
+            let (left, right, up, down, shift) = ui.input(|i| (
+                i.key_down(egui::Key::ArrowLeft),
+                i.key_down(egui::Key::ArrowRight),
+                i.key_down(egui::Key::ArrowUp),
+                i.key_down(egui::Key::ArrowDown),
+                i.modifiers.shift,
+            ));
+            let pan_speed = 4.0 / self.canvas_zoom;
+            let zoom_factor = 1.015_f32;
+            if shift {
+                // Shift+Left/Right → zoom out/in; Shift+Up/Down → zoom in/out
+                if left || down {
+                    self.canvas_zoom = (self.canvas_zoom / zoom_factor).clamp(0.15, 5.0);
+                }
+                if right || up {
+                    self.canvas_zoom = (self.canvas_zoom * zoom_factor).clamp(0.15, 5.0);
+                }
+            } else {
+                if left  { self.canvas_pan.x += pan_speed; }
+                if right { self.canvas_pan.x -= pan_speed; }
+                if up    { self.canvas_pan.y += pan_speed; }
+                if down  { self.canvas_pan.y -= pan_speed; }
+            }
+            if left || right || up || down {
+                ui.ctx().request_repaint();
+            }
+        }
+
         let pan = self.canvas_pan;
         let zoom = self.canvas_zoom;
         let to_screen = |p: Pos2| -> Pos2 { origin + (vec2(p.x, p.y) + pan) * zoom };
@@ -1828,6 +1865,14 @@ impl StaxApp {
                         .find(|n| node_screen_rects.get(&n.id).is_some_and(|r| r.contains(p)))
                         .map(|n| n.id);
                     self.dragging = hit;
+                    // Select the node immediately on press (before drag completes) so
+                    // that even a small accidental drag still selects the intended node.
+                    if let Some(nid) = hit {
+                        self.selected_node = Some(nid);
+                        self.selected_edge = None;
+                        self.selected_nodes.clear();
+                        self.fnport.selected_node = None;
+                    }
                     // Begin marquee when dragging over empty space
                     if hit.is_none() {
                         self.marquee_start = Some(p);

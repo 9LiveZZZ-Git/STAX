@@ -83,6 +83,9 @@ impl Port {
             each_order: 0,
         }
     }
+    pub fn typed(kind: PortKind) -> Self {
+        Port { kind, label: Arc::from(""), each_depth: 0, each_order: 0 }
+    }
     pub fn with_each(mut self, depth: u8, order: u8) -> Self {
         self.each_depth = depth;
         self.each_order = order;
@@ -676,6 +679,12 @@ pub fn lift(ops: &[Op]) -> Graph {
                     0,
                     1,
                 );
+                // Lambda output is Fun-typed so the fn-port inspector can find it.
+                if let Some(node) = g.node_mut(nid) {
+                    if let Some(p) = node.outputs.get_mut(0) {
+                        p.kind = PortKind::Fun;
+                    }
+                }
                 stack.push(PortRef { node: nid, port: 0 });
             }
         }

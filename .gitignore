@@ -26,6 +26,10 @@
 # Cargo local config (target-dir and other machine-specific settings)
 .cargo/config.toml
 
+# Claude Code (AI assistant guidance — not for source control)
+.claude/
+CLAUDE.md
+
 # Windows
 Thumbs.db
 ehthumbs.db

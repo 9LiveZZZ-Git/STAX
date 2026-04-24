@@ -72,6 +72,11 @@ impl Parser {
                         self.advance();
                     }
                 }
+                Some('/') if self.peek2() == Some('/') => {
+                    while matches!(self.peek(), Some(c) if c != '\n') {
+                        self.advance();
+                    }
+                }
                 _ => break,
             }
         }
@@ -581,8 +586,20 @@ mod tests {
     }
 
     #[test]
-    fn comment() {
+    fn comment_semicolon() {
         let ops = parse("1 ; ignored\n2").unwrap();
+        assert_eq!(ops.len(), 2);
+    }
+
+    #[test]
+    fn comment_double_slash() {
+        let ops = parse("1 // ignored\n2").unwrap();
+        assert_eq!(ops.len(), 2);
+    }
+
+    #[test]
+    fn comment_double_slash_leading() {
+        let ops = parse("// whole line comment\n440 sinosc").unwrap();
         assert_eq!(ops.len(), 2);
     }
 
